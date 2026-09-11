@@ -1,3 +1,5 @@
+from collections.abc import Callable
+
 import jax
 import jax.numpy as jnp
 import numpy as np
@@ -37,6 +39,20 @@ def test_zero_padding_loses_flux_at_boundary(cfg: Config) -> None:
     assert 0 < blurred.sum() < 1
     assert np.all(blurred[-1] == 0)
     assert np.all(blurred[:, -1] == 0)
+
+
+def test_blur_matches_full_2d_convolution_and_crop(
+    cfg: Config, full_psf_convolution: Callable[[np.ndarray], np.ndarray]
+) -> None:
+    image = np.random.default_rng(42).uniform(size=(64, 64)).astype(np.float32)
+    obs = cfg["observation"]
+    radius = obs["kernel_size"] // 2
+    reference = full_psf_convolution(image)
+    cropped = reference[radius:-radius, radius:-radius]
+    actual = gaussian_blur(image, obs["sigma_psf"], obs["kernel_size"])
+    np.testing.assert_allclose(actual, cropped, rtol=1e-6, atol=0)
+    assert reference.sum() == pytest.approx(image.sum(dtype=np.float64), rel=1e-12)
+    assert actual.sum(dtype=np.float64) < image.sum(dtype=np.float64)
 
 
 def test_preprocessing_normalizes_flux_and_discards_brightness(cfg: Config) -> None:
