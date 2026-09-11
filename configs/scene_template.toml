@@ -1,0 +1,25 @@
+[metric]
+kind = "kerr"
+mass = {mass}
+spin = {a}
+
+[camera]
+position = [{camera_x}, 0.0, {camera_z}]
+fov_deg = {fov_deg}
+width = {width}
+height = {height}
+supersample = {supersample}
+supersample_max = {supersample}
+
+[disk]
+model = "{disk_model}"
+r_in = {r_in}
+r_out = {r_out}
+{disk_fields}
+
+[sky]
+uniform = [0.0, 0.0, 0.0]
+
+[[output]]
+path = {output_path}
+format = "pfm"
