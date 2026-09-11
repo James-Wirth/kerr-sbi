@@ -42,6 +42,25 @@ achromatic_tolerance = 1e-6
 peak_range_limit = 100.0
 figure_dpi = 180
 
+[sensitivity]
+a_min = 0.02
+a_max = 0.96
+a_count = 8
+incl_min_deg = 8.0
+incl_max_deg = 78.0
+incl_count = 8
+delta_a = 0.02
+delta_incl_deg = 1.0
+noise_peak_fractions = [0.01, 0.03, 0.1, 0.3]
+robustness_indices = [[1, 1], [1, 6], [6, 1], [6, 6]]
+robustness_step_factor = 2.0
+robustness_relative_tolerance = 0.2
+derivative_indices = [[1, 1], [6, 1], [6, 6]]
+singular_tolerance = 1e-12
+well_constrained_sigma_a = 0.05
+weakly_constrained_sigma_a = 0.2
+figure_dpi = 180
+
 [training]
 seed = 1
 batch_size = 256
