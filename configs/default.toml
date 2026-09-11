@@ -61,6 +61,12 @@ well_constrained_sigma_a = 0.05
 weakly_constrained_sigma_a = 0.2
 figure_dpi = 180
 
+[derivative_check]
+step_factors = [1.0, 0.5, 0.25]
+relative_tolerance = 0.2
+diagnostic_sigma_n = 20.0
+figure_dpi = 180
+
 [training]
 seed = 1
 batch_size = 256
