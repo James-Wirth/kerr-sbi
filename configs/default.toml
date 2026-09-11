@@ -22,6 +22,7 @@ emissivity_index = 2.0
 t_in = 40000.0
 
 [simulator]
+version = "0.2.0"
 timeout_seconds = 120.0
 smoke_png = false
 
@@ -64,4 +65,3 @@ runs = "runs"
 logs = "logs"
 figures = "results/figures"
 results = "results"
-simulator_provenance = "results/m0_checks.json"

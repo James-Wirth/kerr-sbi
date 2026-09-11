@@ -2,7 +2,6 @@ import argparse
 import csv
 import hashlib
 import json
-import shutil
 import time
 from copy import deepcopy
 from datetime import UTC, datetime
@@ -20,7 +19,8 @@ from tqdm import tqdm
 from kerr_sbi.config import DEFAULT_CONFIG, Config, load_config, project_path
 from kerr_sbi.obs_model import luminance
 from kerr_sbi.pfm import read_pfm
-from kerr_sbi.simulator import build_scene, nullgeo_binary, render, template_sha256
+from kerr_sbi.provenance import simulator_provenance
+from kerr_sbi.simulator import build_scene, render, template_sha256
 
 
 def measure_emission(rgb: np.ndarray) -> dict[str, Any]:
@@ -50,17 +50,6 @@ def measure_emission(rgb: np.ndarray) -> dict[str, Any]:
             y.sum(axis=1, dtype=np.float64) / y.sum(dtype=np.float64)
         ).tolist(),
     }
-
-
-def verify_provenance(cfg: Config) -> dict[str, Any]:
-    provenance = json.loads(project_path(cfg, "simulator_provenance").read_text())["nullgeo"]
-    executable = shutil.which(nullgeo_binary())
-    if executable is None:
-        raise FileNotFoundError(f"nullgeo executable not found: {nullgeo_binary()}")
-    digest = hashlib.sha256(Path(executable).read_bytes()).hexdigest()
-    if digest != provenance["binary_sha256"]:
-        raise ValueError("nullgeo executable differs from the verified simulator provenance")
-    return provenance
 
 
 def save_montage(
@@ -132,7 +121,7 @@ def main() -> None:
     args = parser.parse_args()
     cfg = load_config(args.config)
     check = cfg["emission_check"]
-    provenance = verify_provenance(cfg)
+    provenance = simulator_provenance(cfg)
     if check["asinh_peak_fraction"] <= 0:
         raise ValueError("asinh_peak_fraction must be positive")
     data_directory = project_path(cfg, "data") / "m1"
