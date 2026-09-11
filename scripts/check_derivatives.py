@@ -2,6 +2,7 @@ import argparse
 import hashlib
 import json
 import time
+from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -36,12 +37,19 @@ def validate_baseline(cfg: Config, metadata: dict[str, Any], provenance: dict[st
             raise ValueError(f"observation {key} differs from the baseline")
 
 
-def render_checks(cfg: Config, baseline_path: Path) -> dict[str, np.ndarray]:
+def render_checks(
+    cfg: Config, baseline_path: Path, supersample: int | None = None
+) -> dict[str, np.ndarray]:
     with np.load(baseline_path, allow_pickle=False) as archive:
         baseline = dict(archive)
     previous = json.loads(str(baseline["metadata_json"]))
     provenance = simulator_provenance(cfg)
     validate_baseline(cfg, previous, provenance)
+    cfg = deepcopy(cfg)
+    if supersample is not None:
+        if not isinstance(supersample, int) or supersample < 1:
+            raise ValueError("supersample must be a positive integer")
+        cfg["scene"]["supersample"] = supersample
     settings = cfg["derivative_check"]
     factors = np.asarray(settings["step_factors"], dtype=np.float64)
     if (
@@ -63,11 +71,16 @@ def render_checks(cfg: Config, baseline_path: Path) -> dict[str, np.ndarray]:
     )
     nominal = baseline["jacobian"][indices[:, 0], indices[:, 1]]
     jacobians = np.empty((len(factors), *nominal.shape), dtype=np.float64)
-    jacobians[0] = nominal
-    directory = project_path(cfg, "data") / "m2_convergence"
+    reuse_nominal = cfg["scene"]["supersample"] == previous["config"]["scene"]["supersample"]
+    if reuse_nominal:
+        jacobians[0] = nominal
+    directory = project_path(cfg, "data") / (
+        "m2_convergence" if supersample is None else f"m2_supersampling/ss{supersample}"
+    )
     directory.mkdir(parents=True, exist_ok=True)
     tasks = []
-    for level in range(1, len(factors)):
+    first_level = 1 if reuse_nominal else 0
+    for level in range(first_level, len(factors)):
         for point, theta in enumerate(parameters):
             for parameter in range(2):
                 for sign in (-1, 1):
@@ -78,6 +91,8 @@ def render_checks(cfg: Config, baseline_path: Path) -> dict[str, np.ndarray]:
     metadata = {
         "date_utc": datetime.now(UTC).isoformat(),
         "baseline_sha256": hashlib.sha256(baseline_path.read_bytes()).hexdigest(),
+        "baseline_supersample": previous["config"]["scene"]["supersample"],
+        "nominal_derivative_reused": reuse_nominal,
         "nullgeo": provenance,
         "template_sha256": template_sha256(cfg),
         "config": {key: value for key, value in cfg.items() if key != "project_root"},
@@ -107,7 +122,7 @@ def render_checks(cfg: Config, baseline_path: Path) -> dict[str, np.ndarray]:
                 "render_seconds": elapsed,
             }
         )
-    for level in range(1, len(factors)):
+    for level in range(first_level, len(factors)):
         for point in range(len(parameters)):
             for parameter in range(2):
                 jacobians[level, point, :, parameter] = central_difference(
@@ -159,8 +174,15 @@ def analyze(data: dict[str, np.ndarray]) -> dict[str, Any]:
     }
 
 
-def save_figures(data: dict[str, np.ndarray], report: dict[str, Any], directory: Path) -> None:
-    settings = json.loads(str(data["metadata_json"]))["config"]["derivative_check"]
+def save_figures(
+    data: dict[str, np.ndarray],
+    report: dict[str, Any],
+    directory: Path,
+    prefix: str = "m2_convergence",
+) -> None:
+    cfg = json.loads(str(data["metadata_json"]))["config"]
+    settings = cfg["derivative_check"]
+    sampling = cfg["scene"]["supersample"]
     directory.mkdir(parents=True, exist_ok=True)
     factors = data["steps"][:, 0] / data["steps"][0, 0]
     changes = np.asarray(report["relative_derivative_changes"])
@@ -185,9 +207,11 @@ def save_figures(data: dict[str, np.ndarray], report: dict[str, Any], directory:
     axes[0, 0].set_ylim(bottom=0)
     axes[1, 0].set_ylabel("Joint CRB / original joint CRB")
     axes[0, -1].legend()
-    fig.suptitle("Finite-difference stability · fixed renderer, PSF and normalized flux")
+    fig.suptitle(
+        f"Finite-difference stability · {sampling}×{sampling} subpixel rays · fixed PSF and flux"
+    )
     for suffix in ("png", "pdf"):
-        fig.savefig(directory / f"m2_convergence.{suffix}", dpi=settings["figure_dpi"])
+        fig.savefig(directory / f"{prefix}.{suffix}", dpi=settings["figure_dpi"])
     plt.close(fig)
     for parameter, label in enumerate(("a", "incl_deg")):
         fig, axes = plt.subplots(
@@ -209,10 +233,158 @@ def save_figures(data: dict[str, np.ndarray], report: dict[str, Any], directory:
                 ax.set_yticks([])
             axes[point, 0].set_ylabel(f"a = {a:.3f}\ni = {inclination:g}°")
             fig.colorbar(panel, ax=axes[point, :], label=f"∂x/∂{label}", shrink=0.8)
-        fig.suptitle(f"Derivative with respect to {label} · common linear scale within each row")
+        fig.suptitle(
+            f"Derivative with respect to {label} · {sampling}×{sampling} subpixel rays\n"
+            "Common linear scale within each row"
+        )
         for suffix in ("png", "pdf"):
-            fig.savefig(directory / f"m2_convergence_{label}.{suffix}", dpi=settings["figure_dpi"])
+            fig.savefig(directory / f"{prefix}_{label}.{suffix}", dpi=settings["figure_dpi"])
         plt.close(fig)
+
+
+def render_supersampling(cfg: Config, baseline_path: Path) -> dict[str, np.ndarray]:
+    levels = cfg["supersampling_check"]["levels"]
+    if (
+        len(levels) < 2
+        or any(not isinstance(level, int) or level < 1 for level in levels)
+        or levels[0] != cfg["scene"]["supersample"]
+        or any(high <= low for low, high in zip(levels[:-1], levels[1:], strict=True))
+    ):
+        raise ValueError("sampling levels must start at the active setting and strictly increase")
+    results = project_path(cfg, "results")
+    reference_path = results / "m2_convergence.npz"
+    with np.load(reference_path, allow_pickle=False) as archive:
+        reference = dict(archive)
+    reference_metadata = json.loads(str(reference["metadata_json"]))
+    validate_baseline(cfg, reference_metadata, simulator_provenance(cfg))
+    if (
+        reference_metadata["baseline_sha256"]
+        != hashlib.sha256(baseline_path.read_bytes()).hexdigest()
+    ):
+        raise ValueError("convergence reference belongs to a different baseline archive")
+    if cfg["derivative_check"] != reference_metadata["config"]["derivative_check"]:
+        raise ValueError("derivative settings differ from the convergence reference")
+    runs = [reference]
+    for level in levels[1:]:
+        data = render_checks(cfg, baseline_path, supersample=level)
+        for key in ("parameters", "steps", "image_shape"):
+            if not np.array_equal(data[key], reference[key]):
+                raise ValueError(f"{key} differ between sampling runs")
+        np.savez_compressed(results / f"m2_supersampling_{level}.npz", **data)
+        runs.append(data)
+    return {
+        "supersamples": np.asarray(levels),
+        "parameters": reference["parameters"],
+        "steps": reference["steps"],
+        "image_shape": reference["image_shape"],
+        "jacobians": np.stack([run["jacobians"] for run in runs]),
+        "metadata_json": np.asarray(
+            json.dumps(
+                {
+                    "config": {key: value for key, value in cfg.items() if key != "project_root"},
+                    "reference_archive_sha256": hashlib.sha256(
+                        reference_path.read_bytes()
+                    ).hexdigest(),
+                    "runs": [json.loads(str(run["metadata_json"])) for run in runs],
+                }
+            )
+        ),
+    }
+
+
+def sampling_run(data: dict[str, np.ndarray], index: int) -> dict[str, np.ndarray]:
+    return {
+        "parameters": data["parameters"],
+        "steps": data["steps"],
+        "image_shape": data["image_shape"],
+        "jacobians": data["jacobians"][index],
+        "metadata_json": np.asarray(
+            json.dumps(json.loads(str(data["metadata_json"]))["runs"][index])
+        ),
+    }
+
+
+def analyze_supersampling(data: dict[str, np.ndarray]) -> dict[str, Any]:
+    metadata = json.loads(str(data["metadata_json"]))
+    reports = [analyze(sampling_run(data, index)) for index in range(len(data["supersamples"]))]
+    norms = np.linalg.norm(data["jacobians"], axis=-2)
+    sampling_changes = np.linalg.norm(np.diff(data["jacobians"], axis=0), axis=-2) / norms[:-1]
+    bounds = np.asarray([report["marginal_std"] for report in reports])
+    timings = [
+        [case["render_seconds"] for case in run["renders"] if case["step_level"] > 0]
+        for run in metadata["runs"]
+    ]
+    medians = np.array([np.median(times) for times in timings])
+    return {
+        "supersamples": data["supersamples"].tolist(),
+        "rays_per_pixel": (data["supersamples"] ** 2).tolist(),
+        "levels": reports,
+        "cross_sampling_derivative_changes": sampling_changes.tolist(),
+        "cross_sampling_std_ratios": (bounds[1:] / bounds[:-1]).tolist(),
+        "std_ratios_to_original_sampling": (bounds / bounds[0]).tolist(),
+        "cross_sampling_axis_order": "successive sampling pair, step level, point, parameter",
+        "matched_render_counts": [len(times) for times in timings],
+        "matched_median_render_seconds": medians.tolist(),
+        "matched_median_render_time_ratios": (medians / medians[0]).tolist(),
+        "render_timing_scope": (
+            "same refined stencils at each sampling level; historical 3x3 timing"
+        ),
+        "sampling_status": "diagnostic comparison; active v1 sampling is unchanged",
+        "noise_status": "pending user choice at M2 gate",
+    }
+
+
+def save_sampling_figures(
+    data: dict[str, np.ndarray], report: dict[str, Any], directory: Path
+) -> None:
+    directory.mkdir(parents=True, exist_ok=True)
+    cfg = json.loads(str(data["metadata_json"]))["config"]
+    levels = data["supersamples"]
+    changes = np.asarray([level["relative_derivative_changes"][-1] for level in report["levels"]])
+    ratios = np.asarray(report["std_ratios_to_original_sampling"])[:, -1]
+    sampling_changes = np.asarray(report["cross_sampling_derivative_changes"])[:, -1]
+    fig, axes = plt.subplots(
+        3, 2, figsize=(11, 10), layout="constrained", sharex=True, sharey="row"
+    )
+    for parameter, label in enumerate(("Spin", "Inclination")):
+        axes[0, parameter].set_title(label)
+        for point, (a, inclination) in enumerate(data["parameters"]):
+            point_label = f"a={a:.3f}, i={inclination:g}°"
+            axes[0, parameter].plot(
+                levels, 100 * changes[:, point, parameter], "o-", label=point_label
+            )
+            axes[1, parameter].plot(levels[1:], 100 * sampling_changes[:, point, parameter], "o-")
+            axes[2, parameter].plot(levels, ratios[:, point, parameter], "o-")
+        axes[0, parameter].axhline(
+            cfg["derivative_check"]["relative_tolerance"] * 100, color="grey", linestyle="--"
+        )
+        axes[1, parameter].axhline(
+            cfg["derivative_check"]["relative_tolerance"] * 100, color="grey", linestyle="--"
+        )
+        axes[2, parameter].axhline(1, color="grey", linestyle="--")
+        for ax in axes[:, parameter]:
+            ax.set_xticks(levels, [f"{n}×{n}" for n in levels])
+            ax.grid(alpha=0.2)
+        axes[2, parameter].set_xlabel("Subpixel rays per pixel")
+    axes[0, 0].set_ylabel("Finest step-pair derivative change (%)")
+    axes[0, 0].set_ylim(bottom=0)
+    axes[1, 0].set_ylabel("Finest derivative change from\npreceding sampling level (%)")
+    axes[1, 0].set_ylim(bottom=0)
+    axes[2, 0].set_ylabel(f"Finest-step joint CRB / {levels[0]}×{levels[0]} joint CRB")
+    axes[0, 1].legend(fontsize=9)
+    fig.suptitle("Supersampling check · 64×64 images · fixed physics and preprocessing")
+    for suffix in ("png", "pdf"):
+        fig.savefig(
+            directory / f"m2_supersampling.{suffix}", dpi=cfg["derivative_check"]["figure_dpi"]
+        )
+    plt.close(fig)
+    for index, level in enumerate(levels[1:], start=1):
+        save_figures(
+            sampling_run(data, index),
+            report["levels"][index],
+            directory,
+            f"m2_supersampling_{level}",
+        )
 
 
 def main() -> None:
@@ -220,22 +392,24 @@ def main() -> None:
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--plot-only", action="store_true")
+    parser.add_argument("--supersampling", action="store_true")
     args = parser.parse_args()
     cfg = load_config(args.config)
     results = project_path(cfg, "results")
     results.mkdir(parents=True, exist_ok=True)
-    archive_path = results / "m2_convergence.npz"
+    name = "m2_supersampling" if args.supersampling else "m2_convergence"
+    archive_path = results / f"{name}.npz"
     if args.plot_only:
         with np.load(archive_path, allow_pickle=False) as archive:
             data = dict(archive)
     else:
-        data = render_checks(cfg, args.baseline or results / "crb_grid.npz")
+        run = render_supersampling if args.supersampling else render_checks
+        data = run(cfg, args.baseline or results / "crb_grid.npz")
         np.savez_compressed(archive_path, **data)
-    report = analyze(data)
-    (results / "m2_convergence.json").write_text(
-        json.dumps(report, indent=2, allow_nan=False) + "\n"
-    )
-    save_figures(data, report, project_path(cfg, "figures"))
+    report = analyze_supersampling(data) if args.supersampling else analyze(data)
+    (results / f"{name}.json").write_text(json.dumps(report, indent=2, allow_nan=False) + "\n")
+    plot = save_sampling_figures if args.supersampling else save_figures
+    plot(data, report, project_path(cfg, "figures"))
     print(json.dumps(report, indent=2, allow_nan=False))
 
 

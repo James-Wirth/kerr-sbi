@@ -67,6 +67,9 @@ relative_tolerance = 0.2
 diagnostic_sigma_n = 20.0
 figure_dpi = 180
 
+[supersampling_check]
+levels = [3, 5, 9]
+
 [training]
 seed = 1
 batch_size = 256

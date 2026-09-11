@@ -19,8 +19,13 @@ def derivative_check() -> ModuleType:
     return module
 
 
+@pytest.mark.parametrize("supersample", [None, 5])
 def test_refined_stencils_and_bounds(
-    derivative_check: ModuleType, cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    derivative_check: ModuleType,
+    cfg: Config,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    supersample: int | None,
 ) -> None:
     cfg["project_root"] = tmp_path
     cfg["scene"].update(height=2, width=2)
@@ -49,15 +54,18 @@ def test_refined_stencils_and_bounds(
         metadata_json=json.dumps(metadata),
     )
     validated = []
+    rendered_sampling = []
 
     def fake_render(a: float, inclination: float, stem: Path, config: Config) -> Path:
+        rendered_sampling.append(config["scene"]["supersample"])
         path = stem.with_suffix(".pfm")
         path.write_text(json.dumps([a, inclination]))
         return path
 
     def fake_preprocess(path: Path, config: Config) -> np.ndarray:
         a, inclination = json.loads(path.read_text())
-        return (1024 + a**2 * spin_pattern + inclination * incl_pattern).reshape(2, 2)
+        scale = config["scene"]["supersample"] / 3
+        return (1024 + scale * (a**2 * spin_pattern + inclination * incl_pattern)).reshape(2, 2)
 
     monkeypatch.setattr(derivative_check, "render", fake_render)
     monkeypatch.setattr(derivative_check, "preprocess_pfm", fake_preprocess)
@@ -66,11 +74,18 @@ def test_refined_stencils_and_bounds(
     monkeypatch.setattr(
         derivative_check, "build_scene", lambda a, i, path, config: validated.append((a, i))
     )
-    data = derivative_check.render_checks(cfg, baseline)
-    assert len(validated) == len(json.loads(str(data["metadata_json"]))["renders"]) == 32
+    data = derivative_check.render_checks(cfg, baseline, supersample=supersample)
+    expected_count = 32 if supersample is None else 48
+    assert (
+        len(validated) == len(json.loads(str(data["metadata_json"]))["renders"]) == expected_count
+    )
+    assert set(rendered_sampling) == {supersample or 3}
+    assert cfg["scene"]["supersample"] == 3
     np.testing.assert_allclose(data["steps"], [[0.02, 1], [0.01, 0.5], [0.005, 0.25]])
     for level in range(3):
-        np.testing.assert_allclose(data["jacobians"][level], jacobian.reshape(4, 4, 2), atol=1e-10)
+        np.testing.assert_allclose(
+            data["jacobians"][level], jacobian.reshape(4, 4, 2) * (supersample or 3) / 3, atol=1e-10
+        )
     report = derivative_check.analyze(data)
     np.testing.assert_allclose(report["relative_derivative_changes"], 0, atol=1e-9)
     np.testing.assert_allclose(report["successive_direction_cosines"], 1)
@@ -129,3 +144,39 @@ def test_divergent_derivatives_are_flagged(derivative_check: ModuleType, cfg: Co
     )
     assert report["finest_pair_flagged"] == [[True, False]]
     np.testing.assert_allclose(np.array(report["std_ratios_to_baseline"])[:, 0, 0], [1, 0.5, 0.25])
+
+
+def test_comparison_between_sampling_levels(derivative_check: ModuleType, cfg: Config) -> None:
+    levels = np.array([3, 5, 9])
+    jacobians = np.broadcast_to(np.eye(2), (3, 3, 1, 2, 2)).copy()
+    jacobians *= (levels / 3)[:, None, None, None, None]
+    run_metadata = []
+    for level in levels:
+        run_metadata.append(
+            {
+                "config": {key: value for key, value in cfg.items() if key != "project_root"},
+                "renders": [
+                    {"step_level": 0, "render_seconds": 100},
+                    {"step_level": 1, "render_seconds": float(level)},
+                    {"step_level": 2, "render_seconds": float(level)},
+                ],
+            }
+        )
+    data = {
+        "supersamples": levels,
+        "parameters": np.array([[0.5, 45]]),
+        "steps": np.array([[0.02, 1], [0.01, 0.5], [0.005, 0.25]]),
+        "image_shape": np.array([1, 2]),
+        "jacobians": jacobians,
+        "metadata_json": np.asarray(json.dumps({"runs": run_metadata})),
+    }
+    report = derivative_check.analyze_supersampling(data)
+    changes = np.asarray(report["cross_sampling_derivative_changes"])
+    np.testing.assert_allclose(changes[:, 0, 0, 0], [2 / 3, 4 / 5])
+    ratios = np.asarray(report["std_ratios_to_original_sampling"])
+    np.testing.assert_allclose(ratios[:, 0, 0, 0], 3 / levels)
+    assert report["matched_render_counts"] == [2, 2, 2]
+    np.testing.assert_allclose(report["matched_median_render_time_ratios"], levels / 3)
+    for entry in report["levels"]:
+        assert not np.asarray(entry["finest_pair_flagged"]).any()
+    json.dumps(report, allow_nan=False)
