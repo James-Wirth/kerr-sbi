@@ -19,7 +19,6 @@ r_out = 15.0
 model = "stylized"
 g_power = 3.0
 emissivity_index = 2.0
-t_in = 40000.0
 
 [simulator]
 version = "0.2.0"
@@ -35,6 +34,7 @@ s = "training_median"
 asinh_scale_factor = 0.1
 
 [emission_check]
+blackbody_t_in = 40000.0
 spins = [0.0, 0.5, 0.98]
 inclinations_deg = [5.0, 45.0, 80.0]
 asinh_peak_fraction = 0.1

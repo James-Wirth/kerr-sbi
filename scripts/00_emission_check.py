@@ -135,6 +135,8 @@ def main() -> None:
         for label, model in (("A", "stylized"), ("B", "blackbody")):
             case_cfg = deepcopy(cfg)
             case_cfg["emission"]["model"] = model
+            if model == "blackbody":
+                case_cfg["emission"]["t_in"] = check["blackbody_t_in"]
             case_cfg["simulator"]["smoke_png"] = False
             cases = []
             for a in check["spins"]:
@@ -182,7 +184,7 @@ def main() -> None:
                 "rgb_channels_identical": all(case["rgb_channels_identical"] for case in cases),
                 "cases": cases,
             }
-            save_montage(cases, label, model, cfg, figures)
+            save_montage(cases, label, model, case_cfg, figures)
     save_edge_profiles(options, cfg, figures)
     report = {
         "date_utc": datetime.now(UTC).isoformat(),

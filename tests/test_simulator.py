@@ -22,6 +22,8 @@ def test_template_camera_and_emission_fields(
     tmp_path: Path, cfg: Config, incl_deg: float, model: str
 ) -> None:
     cfg["emission"]["model"] = model
+    if model == "blackbody":
+        cfg["emission"]["t_in"] = cfg["emission_check"]["blackbody_t_in"]
     output = tmp_path / 'output with "quotes".pfm'
     scene = tomllib.loads(build_scene(0.9, incl_deg, output, cfg))
     angle = math.radians(incl_deg)
@@ -95,6 +97,8 @@ def test_real_render_orientation_determinism_and_preprocessing(
         pytest.skip("requires nullgeo on PATH or NULLGEO_BIN")
     cfg["simulator"]["smoke_png"] = True
     cfg["emission"]["model"] = model
+    if model == "blackbody":
+        cfg["emission"]["t_in"] = cfg["emission_check"]["blackbody_t_in"]
     elapsed = []
     images = []
     for name in ("first", "repeat"):
