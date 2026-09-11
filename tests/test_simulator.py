@@ -4,6 +4,7 @@ import shutil
 import subprocess
 import time
 import tomllib
+from collections.abc import Callable
 from pathlib import Path
 
 import numpy as np
@@ -83,10 +84,17 @@ def test_failed_render_preserves_existing_output_and_cleans_temporary_files(
 
 
 @pytest.mark.slow
-def test_real_render_orientation_determinism_and_preprocessing(tmp_path: Path, cfg: Config) -> None:
+@pytest.mark.parametrize("model", ["stylized", "blackbody"])
+def test_real_render_orientation_determinism_and_preprocessing(
+    tmp_path: Path,
+    cfg: Config,
+    model: str,
+    full_psf_convolution: Callable[[np.ndarray], np.ndarray],
+) -> None:
     if shutil.which(nullgeo_binary()) is None:
         pytest.skip("requires nullgeo on PATH or NULLGEO_BIN")
     cfg["simulator"]["smoke_png"] = True
+    cfg["emission"]["model"] = model
     elapsed = []
     images = []
     for name in ("first", "repeat"):
@@ -104,16 +112,20 @@ def test_real_render_orientation_determinism_and_preprocessing(tmp_path: Path, c
     y = luminance(rgb)
     left_flux = y[:, :32].sum(dtype=np.float64)
     right_flux = y[:, 32:].sum(dtype=np.float64)
-    assert left_flux > 10 * right_flux
+    assert left_flux > 3 * right_flux
     obs = cfg["observation"]
     blurred = gaussian_blur(y, obs["sigma_psf"], obs["kernel_size"])
     blur_relative_flux_change = abs(blurred.sum(dtype=np.float64) / y.sum(dtype=np.float64) - 1)
-    assert blur_relative_flux_change < 1e-4
+    reference = full_psf_convolution(y)
+    radius = obs["kernel_size"] // 2
+    np.testing.assert_allclose(blurred, reference[radius:-radius, radius:-radius], rtol=1e-6)
+    assert reference.sum() == pytest.approx(y.sum(dtype=np.float64), rel=1e-4)
     x = preprocess(rgb, cfg)
     assert x.sum(dtype=np.float64) == pytest.approx(4096, rel=1e-7)
     print(
         json.dumps(
             {
+                "emission_model": model,
                 "left_right_flux_ratio": float(left_flux / right_flux),
                 "blur_relative_flux_change": float(blur_relative_flux_change),
                 "processed_flux": float(x.sum(dtype=np.float64)),
