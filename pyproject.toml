@@ -1,0 +1,27 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "kerr-sbi"
+version = "0.1.0"
+description = "Amortized simulation-based inference from nullgeo Kerr images"
+requires-python = ">=3.11"
+dependencies = [
+  "jax", "equinox", "optax", "flowjax", "numpy", "matplotlib",
+  "corner", "tomli-w", "tqdm",
+]
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["slow: real sequential renders; requires the nullgeo CLI"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]

@@ -1,0 +1,57 @@
+[prior]
+a_min = 0.0
+a_max = 0.98
+incl_min_deg = 5.0
+incl_max_deg = 80.0
+logit_clip = 1e-6
+
+[scene]
+mass = 1.0
+camera_distance = 85.0
+fov_deg = 22.0
+width = 64
+height = 64
+supersample = 3
+r_in = 0.0
+r_out = 15.0
+
+[emission]
+model = "stylized"
+g_power = 3.0
+emissivity_index = 2.0
+t_in = 40000.0
+
+[simulator]
+timeout_seconds = 120.0
+smoke_png = false
+
+[observation]
+sigma_psf = 1.0
+kernel_size = 7
+flux_sum = 4096.0
+sigma_n = "pending_m2"
+s = "training_median"
+asinh_scale_factor = 0.1
+
+[training]
+seed = 1
+batch_size = 256
+learning_rate = 3e-4
+warmup_steps = 500
+weight_decay = 1e-4
+gradient_clip = 1.0
+validation_fraction = 0.1
+validation_noise_seed = 42
+patience = 20
+max_epochs = 200
+embedding_dim = 64
+flow_layers = 6
+spline_knots = 8
+spline_interval = 5.0
+
+[paths]
+scene_template = "configs/scene_template.toml"
+data = "data"
+runs = "runs"
+logs = "logs"
+figures = "results/figures"
