@@ -33,6 +33,14 @@ sigma_n = "pending_m2"
 s = "training_median"
 asinh_scale_factor = 0.1
 
+[emission_check]
+spins = [0.0, 0.5, 0.98]
+inclinations_deg = [5.0, 45.0, 80.0]
+asinh_peak_fraction = 0.1
+achromatic_tolerance = 1e-6
+peak_range_limit = 100.0
+figure_dpi = 180
+
 [training]
 seed = 1
 batch_size = 256
@@ -55,3 +63,5 @@ data = "data"
 runs = "runs"
 logs = "logs"
 figures = "results/figures"
+results = "results"
+simulator_provenance = "results/m0_checks.json"
