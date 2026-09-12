@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="Local dataset and training monitor for Kerr simulation-based inference"
+    />
+    <title>Kerr · Training monitor</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="/">kerr<span> / </span>observatory</a>
+      <div class="connection">
+        <span id="connection-dot" class="dot"></span
+        ><span id="connection">Connecting</span
+        ><button id="refresh" class="quiet">Refresh</button>
+      </div>
+    </header>
+    <div class="workspace">
+      <aside>
+        <div class="eyebrow">EXPERIMENTS</div>
+        <h1>Training monitor</h1>
+        <p class="aside-note">Local runs, live measurements.</p>
+        <label for="run-filter" class="sr-only">Filter runs</label
+        ><select id="run-filter">
+          <option value="all">All experiments</option>
+          <option value="physical">Physical images</option>
+          <option value="dummy">Dummy checks</option>
+        </select>
+        <nav id="run-list" aria-label="Training runs"></nav>
+        <div class="storage">
+          <div class="eyebrow">DISK SPACE</div>
+          <strong id="disk-free">—</strong>
+          <p id="disk-detail">Measuring project storage…</p>
+          <div id="storage-breakdown"></div>
+          <p class="muted">
+            13,000 images + arrays<br /><span id="planned-size">—</span>
+            estimated
+          </p>
+        </div>
+      </aside>
+      <main>
+        <div id="notice" class="notice" hidden></div>
+        <section class="run-heading">
+          <div>
+            <div class="eyebrow" id="run-kind">EXPERIMENT OVERVIEW</div>
+            <h2 id="run-title">Select a training run</h2>
+            <p id="run-subtitle" class="muted">
+              Existing experiments will appear here.
+            </p>
+          </div>
+          <span id="run-status" class="status">Waiting</span>
+        </section>
+        <div id="run-caution" class="caution" hidden></div>
+        <section class="metrics" aria-label="Run measurements">
+          <article>
+            <span>Optimizer progress</span><strong id="step-value">—</strong
+            ><progress id="step-bar" value="0" max="1"></progress
+            ><small id="epoch-value">No run selected</small>
+          </article>
+          <article>
+            <span>Best validation NLL</span><strong id="best-value">—</strong
+            ><small id="prior-value">Prior baseline unavailable</small>
+          </article>
+          <article>
+            <span>Elapsed training time</span
+            ><strong id="elapsed-value">—</strong
+            ><small id="speed-value">Update speed unavailable</small>
+          </article>
+          <article>
+            <span>Dataset used for fitting</span
+            ><strong id="rows-value">—</strong
+            ><small id="validation-value">Validation rows unavailable</small>
+          </article>
+        </section>
+        <section class="panel loss-panel">
+          <div class="panel-heading">
+            <div>
+              <h3>Learning curves</h3>
+              <p>
+                Negative log likelihood in standardized parameter space · lower
+                is better
+              </p>
+            </div>
+            <div class="legend">
+              <span class="train-key">Training</span
+              ><span class="validation-key">Validation</span
+              ><span class="prior-key">Validation prior</span>
+            </div>
+          </div>
+          <div
+            id="loss-chart"
+            class="chart"
+            aria-label="Training and validation loss curves"
+          ></div>
+          <p id="loss-caption" class="chart-caption">
+            Waiting for the first evaluation.
+          </p>
+        </section>
+        <div class="lower-grid">
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Dataset explorer</h3>
+                <p>Training images after PSF and flux normalization</p>
+              </div>
+            </div>
+            <div class="dataset-controls">
+              <label for="dataset-select">Snapshot</label
+              ><select id="dataset-select"></select
+              ><label for="image-index">Image row</label
+              ><input id="image-index" type="number" min="0" value="0" /><button
+                id="previous"
+                class="quiet"
+                aria-label="Previous image"
+              >
+                ←</button
+              ><button id="next" class="quiet" aria-label="Next image">
+                →
+              </button>
+            </div>
+            <div class="image-details">
+              <canvas
+                id="preview"
+                width="64"
+                height="64"
+                aria-label="Selected preprocessed training image"
+              ></canvas>
+              <div>
+                <div id="image-label" class="image-label">
+                  No preview loaded
+                </div>
+                <dl id="image-stats"></dl>
+                <p class="muted small">
+                  Display-only asinh stretch.<br />Noise is added during
+                  training.
+                </p>
+              </div>
+            </div>
+            <div id="dataset-inventory" class="inventory"></div>
+          </section>
+          <section class="panel">
+            <div class="panel-heading">
+              <div>
+                <h3>Run configuration</h3>
+                <p>Recorded settings for this experiment</p>
+              </div>
+            </div>
+            <dl id="run-config" class="config"></dl>
+            <div class="checkpoint">
+              <span class="eyebrow">RECOVERY</span>
+              <p id="checkpoint-info">No checkpoint selected.</p>
+            </div>
+            <details>
+              <summary>Recent evaluations</summary>
+              <div class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Step</th>
+                      <th>Training NLL</th>
+                      <th>Validation NLL</th>
+                    </tr>
+                  </thead>
+                  <tbody id="evaluations"></tbody>
+                </table>
+              </div>
+            </details>
+          </section>
+        </div>
+        <footer>
+          <span>Read-only · stays on this machine</span
+          ><span id="last-refresh">Waiting for local records</span>
+        </footer>
+      </main>
+    </div>
+  </body>
+</html>
