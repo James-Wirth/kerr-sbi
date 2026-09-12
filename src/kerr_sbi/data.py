@@ -6,8 +6,9 @@ import jax.numpy as jnp
 import numpy as np
 
 from kerr_sbi.config import Config, project_path
-from kerr_sbi.dataset import dataset_identity, file_sha256, load_preprocessed, read_parameters
+from kerr_sbi.dataset import dataset_identity, load_preprocessed, read_parameters
 from kerr_sbi.obs_model import observe
+from kerr_sbi.persistence import file_sha256
 from kerr_sbi.prior import sample_prior
 
 

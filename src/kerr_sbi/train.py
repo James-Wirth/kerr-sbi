@@ -26,9 +26,9 @@ from kerr_sbi.data import (
     u_to_theta,
     validation_observations,
 )
-from kerr_sbi.dataset import exclusive_lock, file_sha256, write_json
 from kerr_sbi.dummy import dummy_config
 from kerr_sbi.model import Posterior, masked_nll
+from kerr_sbi.persistence import exclusive_lock, file_sha256, write_json
 
 
 class TrainState(eqx.Module):

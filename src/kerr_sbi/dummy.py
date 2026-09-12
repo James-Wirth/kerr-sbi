@@ -7,8 +7,9 @@ from typing import Any
 import numpy as np
 
 from kerr_sbi.config import Config, project_path
-from kerr_sbi.dataset import exclusive_lock, file_sha256, parameter_csv, write_json
+from kerr_sbi.dataset import parameter_csv
 from kerr_sbi.obs_model import preprocess
+from kerr_sbi.persistence import exclusive_lock, file_sha256, write_json
 from kerr_sbi.prior import sample_prior
 
 

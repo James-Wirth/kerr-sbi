@@ -1,13 +1,10 @@
 import csv
-import fcntl
 import hashlib
 import io
 import json
 import os
 import tempfile
 import time
-from collections.abc import Iterator
-from contextlib import contextmanager
 from copy import deepcopy
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,45 +15,10 @@ from tqdm import tqdm
 
 from kerr_sbi.config import Config, project_path
 from kerr_sbi.obs_model import preprocess_pfm
+from kerr_sbi.persistence import atomic_text, exclusive_lock, file_sha256, write_json
 from kerr_sbi.prior import sample_prior
 from kerr_sbi.provenance import simulator_provenance
 from kerr_sbi.simulator import RenderError, render, template_sha256
-
-
-def file_sha256(path: Path) -> str:
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
-
-
-def atomic_text(path: Path, text: str) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as stream:
-        temporary = Path(stream.name)
-        try:
-            stream.write(text)
-            stream.flush()
-            os.fsync(stream.fileno())
-            temporary.replace(path)
-        finally:
-            temporary.unlink(missing_ok=True)
-
-
-def write_json(path: Path, value: Any) -> None:
-    atomic_text(path, json.dumps(value, indent=2, allow_nan=False) + "\n")
-
-
-@contextmanager
-def exclusive_lock(path: Path) -> Iterator[None]:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("a") as stream:
-        try:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except BlockingIOError as exc:
-            raise RuntimeError(f"another process holds {path}") from exc
-        try:
-            yield
-        finally:
-            fcntl.flock(stream.fileno(), fcntl.LOCK_UN)
 
 
 def split_directory(cfg: Config, split: str) -> Path:
