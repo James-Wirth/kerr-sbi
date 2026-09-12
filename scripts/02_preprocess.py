@@ -9,7 +9,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
-from kerr_sbi.config import DEFAULT_CONFIG, Config, load_config, project_path
+from kerr_sbi.config import DEFAULT_CONFIG, Config, dataset_config, load_config, project_path
 from kerr_sbi.dataset import load_preprocessed, preprocess_dataset
 
 
@@ -51,10 +51,11 @@ def save_montage(cfg: Config, split: str) -> Path:
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
-    parser.add_argument("--split", choices=("train", "test"), required=True)
+    parser.add_argument("--dataset")
+    parser.add_argument("--split", choices=("train", "dev", "test"), required=True)
     parser.add_argument("--montage", action="store_true")
     args = parser.parse_args()
-    cfg = load_config(args.config)
+    cfg = dataset_config(load_config(args.config), args.dataset)
     metadata = preprocess_dataset(cfg, args.split)
     summary = {
         key: metadata[key]

@@ -22,8 +22,8 @@ from kerr_sbi.simulator import RenderError, render, template_sha256
 
 
 def split_directory(cfg: Config, split: str) -> Path:
-    if split not in ("train", "test"):
-        raise ValueError("split must be train or test")
+    if split not in ("train", "dev", "test"):
+        raise ValueError("split must be train, dev or test")
     return project_path(cfg, "data") / split
 
 
@@ -144,9 +144,12 @@ def prepare_generation(
     identity = dataset_identity(cfg, provenance)
     metadata_path = directory / "generation.json"
     params_path = directory / "params.csv"
-    other = split_directory(cfg, "test" if split == "train" else "train") / "generation.json"
-    if other.exists() and json.loads(other.read_text())["seed"] == seed:
-        raise ValueError("train and test must use different prior seeds")
+    for other_split in ("train", "dev", "test"):
+        if other_split == split:
+            continue
+        other = split_directory(cfg, other_split) / "generation.json"
+        if other.exists() and json.loads(other.read_text())["seed"] == seed:
+            raise ValueError("train, dev and test must use different prior seeds")
     if metadata_path.exists():
         metadata = json.loads(metadata_path.read_text())
         if metadata["split"] != split or metadata["seed"] != seed:

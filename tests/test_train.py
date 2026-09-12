@@ -129,8 +129,10 @@ def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
 def test_short_schedule_and_explicit_debug_mode(cfg: Config) -> None:
     with pytest.raises(ValueError, match="warmup"):
         optimizer_for(cfg, 20)
-    with pytest.raises(ValueError, match="explicit dummy"):
-        effective_config(cfg, dummy=False, overfit=True)
+    physical = effective_config(cfg, dummy=False, overfit=True)
+    assert physical["training"]["max_steps"] == 1000
+    assert physical["physical_overfit"]["subset_size"] == 256
+    assert physical["observation"]["sigma_n"] == 20
     dev = effective_config(cfg, dummy=True, overfit=False)
     assert dev["training"]["warmup_steps"] == 5
     assert dev["training"]["batch_size"] == 8

@@ -112,6 +112,41 @@ target_check_steps = 50
 max_seconds = 300.0
 sigma_n = 0.0
 
+[local_pilot]
+batch_size = 32
+warmup_steps = 100
+max_epochs = 100
+max_steps = 0
+patience = 20
+
+[local_pilot_data]
+train_count = 2000
+train_seed = 1
+dev_count = 200
+dev_seed = 3
+checkpoint_steps = 1000
+
+[physical_overfit]
+subset_size = 256
+batch_size = 32
+warmup_steps = 50
+max_epochs = 1000
+max_steps = 1000
+patience = 1000
+target_check_steps = 200
+target_nll_gain = 1.0
+max_seconds = 300.0
+sigma_n = 0.0
+
+[development_diagnostics]
+posterior_samples = 199
+noise_seed = 104
+posterior_seed = 105
+shuffle_seed = 106
+batch_size = 16
+rank_bins = 20
+figure_dpi = 160
+
 [dataset]
 montage_columns = 6
 montage_max_images = 30

@@ -78,15 +78,23 @@ Update = Callable[
 ]
 
 
+def overfit_settings(cfg: Config, dummy: bool) -> dict[str, Any]:
+    return cfg["dummy_overfit" if dummy else "physical_overfit"]
+
+
 def effective_config(cfg: Config, *, dummy: bool, overfit: bool) -> Config:
-    if overfit and not dummy:
-        raise ValueError("the noiseless overfit experiment requires explicit dummy mode")
     cfg = dummy_config(cfg) if dummy else deepcopy(cfg)
     if dummy:
         for name in ("batch_size", "warmup_steps", "max_steps"):
             cfg["training"][name] = cfg["dummy_training"][name]
     if overfit:
-        cfg["training"]["max_steps"] = cfg["dummy_overfit"]["max_steps"]
+        cfg["training"].update(
+            {
+                key: value
+                for key, value in overfit_settings(cfg, dummy).items()
+                if key in cfg["training"]
+            }
+        )
     return cfg
 
 
@@ -172,7 +180,7 @@ def prepare_run(
     data = load_split(cfg, "train", allow_dummy=dummy)
     rows, validation = training_rows(data, cfg["training"]["validation_fraction"])
     if overfit:
-        count = cfg["dummy_overfit"]["subset_size"]
+        count = overfit_settings(cfg, dummy)["subset_size"]
         if not 2 <= count <= len(rows):
             raise ValueError("overfit subset must fit inside training-only rows")
         rows = rows[:count]
@@ -191,8 +199,8 @@ def prepare_run(
     if settings["max_steps"]:
         total_steps = min(total_steps, settings["max_steps"])
     optimizer = optimizer_for(cfg, total_steps)
-    sigma_n = cfg["dummy_overfit"]["sigma_n"] if overfit else cfg["observation"]["sigma_n"]
-    max_seconds = cfg["dummy_overfit"]["max_seconds"] if overfit else None
+    sigma_n = overfit_settings(cfg, dummy)["sigma_n"] if overfit else cfg["observation"]["sigma_n"]
+    max_seconds = overfit_settings(cfg, dummy)["max_seconds"] if overfit else None
     identity = {
         "config": {key: value for key, value in cfg.items() if key != "project_root"},
         "dummy": dummy,
@@ -413,7 +421,8 @@ def run_training(
                     update_seconds=durations[-1],
                 )
                 check_target = (
-                    overfit and int(state.step) == cfg["dummy_overfit"]["target_check_steps"]
+                    overfit
+                    and int(state.step) == overfit_settings(cfg, dummy)["target_check_steps"]
                 )
                 if (
                     int(state.step) % batches_per_epoch == 0
@@ -426,8 +435,10 @@ def run_training(
                     events.emit("evaluation", **record)
                     if (
                         overfit
-                        and int(state.step) >= cfg["dummy_overfit"]["target_check_steps"]
-                        and record["train_nll"] < evaluation.prior_train_nll
+                        and int(state.step) >= overfit_settings(cfg, dummy)["target_check_steps"]
+                        and record["train_nll"]
+                        < evaluation.prior_train_nll
+                        - overfit_settings(cfg, dummy).get("target_nll_gain", 0.0)
                     ):
                         stop_reason = "overfit_target"
                         break

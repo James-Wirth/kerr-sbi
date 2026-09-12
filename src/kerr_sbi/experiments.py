@@ -4,16 +4,16 @@ from typing import Any
 
 from kerr_sbi.config import Config
 from kerr_sbi.data import fit_normalization, load_split, training_rows
-from kerr_sbi.train import effective_config, optimizer_for
+from kerr_sbi.train import effective_config, optimizer_for, overfit_settings
 
 
 def experiment_config(cfg: Config, profile: str) -> Config:
     result = deepcopy(cfg)
     if profile == "default":
         return result
-    if profile != "local-smoke":
+    if profile not in ("local-smoke", "local-pilot"):
         raise ValueError("unknown training profile")
-    result["training"].update(result["local_smoke"])
+    result["training"].update(result[profile.replace("-", "_")])
     return result
 
 
@@ -22,7 +22,7 @@ def preflight(cfg: Config, *, dummy: bool, overfit: bool) -> dict[str, Any]:
     data = load_split(effective, "train", allow_dummy=dummy)
     train, validation = training_rows(data, effective["training"]["validation_fraction"])
     if overfit:
-        count = effective["dummy_overfit"]["subset_size"]
+        count = overfit_settings(effective, dummy)["subset_size"]
         if not 2 <= count <= len(train):
             raise ValueError("overfit subset must fit inside training-only rows")
         train = train[:count]
@@ -44,7 +44,7 @@ def preflight(cfg: Config, *, dummy: bool, overfit: bool) -> dict[str, Any]:
         "batches_per_epoch": batches,
         "total_steps": steps,
         "warmup_steps": training["warmup_steps"],
-        "sigma_n": effective["dummy_overfit"]["sigma_n"]
+        "sigma_n": overfit_settings(effective, dummy)["sigma_n"]
         if overfit
         else effective["observation"]["sigma_n"],
         "normalization": asdict(stats),
