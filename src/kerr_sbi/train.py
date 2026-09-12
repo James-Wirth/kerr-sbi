@@ -34,6 +34,7 @@ from kerr_sbi.dummy import dummy_config
 from kerr_sbi.inference import posterior_check as posterior_check
 from kerr_sbi.model import Posterior, masked_nll
 from kerr_sbi.persistence import exclusive_lock, file_sha256, write_json
+from kerr_sbi.telemetry import EventSink, TrainingEvents
 
 
 @dataclass(frozen=True)
@@ -217,6 +218,8 @@ def prepare_run(
                 "checkpoint.py",
                 "inference.py",
                 "persistence.py",
+                "telemetry.py",
+                "experiments.py",
             )
         },
     }
@@ -325,6 +328,7 @@ def run_training(
     overfit: bool = False,
     resume: bool = False,
     stop_after: int | None = None,
+    on_event: EventSink | None = None,
 ) -> TrainingSummary:
     started = time.perf_counter()
     run = prepare_run(cfg, run_name, dummy=dummy, overfit=overfit, stop_after=stop_after)
@@ -333,7 +337,10 @@ def run_training(
     batch_size = settings["batch_size"]
     batches_per_epoch, total_steps = run.batches_per_epoch, run.total_steps
     max_seconds = run.max_seconds
-    with exclusive_lock(directory.parent / f".{run_name}.lock"):
+    with (
+        exclusive_lock(directory.parent / f".{run_name}.lock"),
+        TrainingEvents(on_event, started) as events,
+    ):
         progress = create_or_restore_run(run, resume=resume, stop_after=stop_after)
         if progress.finished_summary is not None:
             return progress.finished_summary
@@ -343,6 +350,8 @@ def run_training(
             progress.previous_seconds,
         )
         initial_step = int(state.step)
+        events.previous_seconds = previous_seconds
+        events.emit("started", directory=str(directory), step=initial_step, status="initializing")
         evaluation = prepare_evaluation(run)
         pending_evaluation = (
             history
@@ -350,8 +359,10 @@ def run_training(
             and (int(state.step) % batches_per_epoch == 0 or int(state.step) == total_steps)
         )
         if not history or pending_evaluation:
+            events.emit("phase", status="evaluating")
             state, record = measure(state, evaluation, batch_size)
             history.append(record)
+            events.emit("evaluation", **record)
         update = make_update(run.optimizer, run.stats, run.sigma_n)
         durations, gradient_norms, batch_losses = [], [], []
         stop_reason = "complete"
@@ -394,6 +405,13 @@ def run_training(
                 )
                 batch_losses.append(loss)
                 gradient_norms.append(gradient_norm)
+                events.emit(
+                    "update",
+                    step=int(state.step),
+                    batch_nll=loss,
+                    gradient_norm=gradient_norm,
+                    update_seconds=durations[-1],
+                )
                 check_target = (
                     overfit and int(state.step) == cfg["dummy_overfit"]["target_check_steps"]
                 )
@@ -402,8 +420,10 @@ def run_training(
                     or int(state.step) == total_steps
                     or check_target
                 ):
+                    events.emit("phase", status="evaluating")
                     state, record = measure(state, evaluation, batch_size)
                     history.append(record)
+                    events.emit("evaluation", **record)
                     if (
                         overfit
                         and int(state.step) >= cfg["dummy_overfit"]["target_check_steps"]
@@ -434,6 +454,8 @@ def run_training(
             "last_evaluation": history[-1],
             "checkpoint_root": str(directory),
         }
+        events.emit("phase", status="saving", step=int(state.step))
         save_checkpoint(directory, state, run.identity, history, summary)
         write_json(directory / "summary.json", summary)
+        events.emit("finished", status=stop_reason, step=int(state.step))
         return summary

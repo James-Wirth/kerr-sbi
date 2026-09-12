@@ -99,6 +99,12 @@ max_steps = 20
 posterior_samples = 19
 posterior_seed = 103
 
+[local_smoke]
+batch_size = 8
+warmup_steps = 5
+max_steps = 40
+max_epochs = 20
+
 [dummy_overfit]
 subset_size = 32
 max_steps = 200
