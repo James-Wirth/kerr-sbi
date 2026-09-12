@@ -249,7 +249,7 @@ def run_training(
                 "overfit_target",
                 "time_limit",
             ):
-                return checkpoint["summary"]
+                return {**checkpoint["summary"], "updates_this_invocation": 0}
             if stop_after is not None and stop_after <= int(state.step):
                 raise ValueError("stop-after must be beyond the saved step")
         else:

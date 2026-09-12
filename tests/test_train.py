@@ -40,6 +40,8 @@ def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
     resumed = run_training(cfg, "resumed", dummy=True, resume=True)
     clean = run_training(cfg, "clean", dummy=True)
     assert resumed["step"] == clean["step"] == 4
+    completed_resume = run_training(cfg, "clean", dummy=True, resume=True)
+    assert completed_resume["updates_this_invocation"] == 0
     assert cfg == original
     effective = effective_config(cfg, dummy=True, overfit=False)
     template = initialize_state(effective, optimizer_for(effective, 4))
