@@ -69,6 +69,7 @@ figure_dpi = 180
 
 [supersampling_check]
 levels = [3, 5, 9]
+joint_relative_tolerance = 0.1
 
 [training]
 seed = 1
