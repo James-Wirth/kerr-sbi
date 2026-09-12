@@ -8,6 +8,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from kerr_sbi import train
 from kerr_sbi.config import Config
 from kerr_sbi.dummy import build_dummy_dataset
 from kerr_sbi.train import (
@@ -32,19 +33,19 @@ def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
     cfg = small_model_cfg
     cfg["project_root"] = tmp_path
     cfg["dummy_dataset"].update(train_count=12, test_count=4)
-    cfg["dummy_training"].update(batch_size=2, warmup_steps=1, max_steps=4, posterior_samples=3)
+    cfg["dummy_training"].update(batch_size=2, warmup_steps=1, max_steps=7, posterior_samples=3)
     build_dummy_dataset(cfg)
     original = deepcopy(cfg)
-    paused = run_training(cfg, "resumed", dummy=True, stop_after=2)
-    assert paused["step"] == 2 and paused["stop_reason"] == "paused"
+    paused = run_training(cfg, "resumed", dummy=True, stop_after=4)
+    assert paused["step"] == 4 and paused["stop_reason"] == "paused"
     resumed = run_training(cfg, "resumed", dummy=True, resume=True)
     clean = run_training(cfg, "clean", dummy=True)
-    assert resumed["step"] == clean["step"] == 4
+    assert resumed["step"] == clean["step"] == 7
     completed_resume = run_training(cfg, "clean", dummy=True, resume=True)
     assert completed_resume["updates_this_invocation"] == 0
     assert cfg == original
     effective = effective_config(cfg, dummy=True, overfit=False)
-    template = initialize_state(effective, optimizer_for(effective, 4))
+    template = initialize_state(effective, optimizer_for(effective, 7))
     states = []
     for name in ("resumed", "clean"):
         directory = tmp_path / "runs" / "dummy" / name
@@ -96,3 +97,53 @@ def test_short_schedule_and_explicit_debug_mode(cfg: Config) -> None:
     debug = effective_config(cfg, dummy=True, overfit=True)
     assert debug["training"]["max_steps"] == 200
     assert debug["observation"]["sigma_n"] == cfg["observation"]["sigma_n"] == 20
+
+
+@pytest.mark.parametrize("stop_after", [4, 5])
+def test_resume_across_shuffle_boundary_preserves_losses_and_stopping(
+    small_model_cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, stop_after: int
+) -> None:
+    cfg = small_model_cfg
+    cfg["project_root"] = tmp_path
+    cfg["dummy_dataset"].update(train_count=11, test_count=2)
+    cfg["dummy_training"].update(batch_size=2, warmup_steps=1, max_steps=12)
+    cfg["training"].update(learning_rate=0.0, patience=2)
+    build_dummy_dataset(cfg)
+    losses = []
+    make_update = train.make_update
+
+    def recording_update(*args):
+        update = make_update(*args)
+
+        def record(*batch):
+            result = update(*batch)
+            losses.append((float(result[3]), float(result[4])))
+            return result
+
+        return record
+
+    monkeypatch.setattr(train, "make_update", recording_update)
+    paused = run_training(cfg, "resumed", dummy=True, stop_after=stop_after)
+    assert paused["step"] == stop_after and paused["stop_reason"] == "paused"
+    resumed = run_training(cfg, "resumed", dummy=True, resume=True)
+    resumed_losses = losses.copy()
+    losses.clear()
+    clean = run_training(cfg, "clean", dummy=True)
+    assert resumed["step"] == clean["step"] == 10
+    assert resumed["stop_reason"] == clean["stop_reason"] == "early_stopping"
+    assert resumed["last_batch_nll"] == clean["last_batch_nll"]
+    np.testing.assert_array_equal(resumed_losses, losses)
+    effective = effective_config(cfg, dummy=True, overfit=False)
+    template = initialize_state(effective, optimizer_for(effective, 12))
+    states, histories = [], []
+    for name in ("resumed", "clean"):
+        directory = tmp_path / "runs/dummy" / name
+        identity = json.loads((directory / "run.json").read_text())
+        state, metadata = load_checkpoint(directory, template, identity)
+        assert len(identity["train_indices"]) == 9
+        assert int(state.stale_epochs) == 2
+        states.append(state)
+        histories.append(metadata["history"])
+    assert_same_arrays(*states)
+    assert histories[0] == histories[1]
+    assert [record["step"] for record in histories[0]] == [0, 5, 10]
