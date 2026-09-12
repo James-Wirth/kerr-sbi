@@ -93,6 +93,14 @@ montage_max_images = 30
 montage_peak_fraction = 0.1
 figure_dpi = 180
 
+[dummy_dataset]
+train_count = 64
+test_count = 16
+train_seed = 101
+test_seed = 102
+center_margin_fraction = 0.15
+width_fraction = 0.06
+
 [paths]
 scene_template = "configs/scene_template.toml"
 data = "data"
