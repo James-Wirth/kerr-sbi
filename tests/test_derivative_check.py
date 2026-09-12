@@ -28,7 +28,7 @@ def analytic_checks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> tuple[Config, Path, np.ndarray, list[int], list[tuple[float, float]]]:
     cfg["project_root"] = tmp_path
-    cfg["scene"].update(height=2, width=2)
+    cfg["scene"].update(height=2, width=2, supersample=3)
     spin_pattern = np.array([1.0, -1.0, 0.0, 0.0])
     incl_pattern = np.array([0.0, 0.0, 1.0, -1.0])
     spins = np.array([0.2, 0.8])

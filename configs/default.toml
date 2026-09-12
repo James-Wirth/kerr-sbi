@@ -11,7 +11,7 @@ camera_distance = 85.0
 fov_deg = 22.0
 width = 64
 height = 64
-supersample = 3
+supersample = 9
 r_in = 0.0
 r_out = 15.0
 

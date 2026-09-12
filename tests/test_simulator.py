@@ -31,7 +31,11 @@ def test_template_camera_and_emission_fields(
         scene["camera"]["position"], [-85 * math.sin(angle), 0.0, 85 * math.cos(angle)]
     )
     assert scene["metric"] == {"kind": "kerr", "mass": 1.0, "spin": 0.9}
-    assert scene["camera"]["supersample"] == scene["camera"]["supersample_max"] == 3
+    assert (
+        scene["camera"]["supersample"]
+        == scene["camera"]["supersample_max"]
+        == cfg["scene"]["supersample"]
+    )
     assert scene["sky"] == {"uniform": [0.0, 0.0, 0.0]}
     assert scene["output"] == [{"path": str(output), "format": "pfm"}]
     assert "integrator" not in scene
