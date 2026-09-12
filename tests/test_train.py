@@ -11,6 +11,7 @@ import pytest
 from kerr_sbi import train
 from kerr_sbi.config import Config
 from kerr_sbi.dummy import build_dummy_dataset
+from kerr_sbi.inference import load_posterior
 from kerr_sbi.train import (
     effective_config,
     initialize_state,
@@ -28,7 +29,7 @@ def assert_same_arrays(left: object, right: object) -> None:
 
 
 def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
-    small_model_cfg: Config, tmp_path: Path
+    small_model_cfg: Config, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg = small_model_cfg
     cfg["project_root"] = tmp_path
@@ -70,7 +71,24 @@ def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
             eqx.filter(getattr(states[0].model, name), eqx.is_inexact_array)
         )
         assert any(not np.array_equal(a, b) for a, b in zip(initial, trained, strict=True))
-    report = posterior_check(cfg, "clean")
+
+    def fail_optimizer(*args):
+        pytest.fail("inference constructed an optimizer or training state")
+
+    with monkeypatch.context() as inference_patch:
+        inference_patch.setattr(train, "optimizer_for", fail_optimizer)
+        inference_patch.setattr(train, "initialize_state", fail_optimizer)
+        inference_patch.setattr(train.optax, "adamw", fail_optimizer)
+        posterior = load_posterior(tmp_path / "runs/dummy/clean")
+        assert posterior.identity == identity
+        np.testing.assert_array_equal(
+            posterior.model.log_prob(z, u), states[1].best_model.log_prob(z, u)
+        )
+        key = jax.random.key(71)
+        np.testing.assert_array_equal(
+            posterior.model.sample(z, key, 3), states[1].best_model.sample(z, key, 3)
+        )
+        report = posterior_check(cfg, "clean")
     assert report["samples_shape"] == [3, 4, 2] and report["ranks_shape"] == [4, 2]
     assert report["scientific_calibration"] is False
     changed = deepcopy(cfg)
@@ -83,6 +101,8 @@ def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
     path.write_bytes(path.read_bytes()[:-1] + b"x")
     with pytest.raises(ValueError, match="array hash"):
         load_checkpoint(directory, template, json.loads((directory / "run.json").read_text()))
+    with pytest.raises(ValueError, match="array hash"):
+        load_posterior(directory)
 
 
 def test_short_schedule_and_explicit_debug_mode(cfg: Config) -> None:

@@ -3,7 +3,8 @@ import json
 from pathlib import Path
 
 from kerr_sbi.config import DEFAULT_CONFIG, load_config
-from kerr_sbi.train import posterior_check, run_training
+from kerr_sbi.inference import posterior_check
+from kerr_sbi.train import run_training
 
 
 def main() -> None:
