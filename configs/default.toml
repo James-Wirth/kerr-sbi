@@ -29,7 +29,7 @@ smoke_png = false
 sigma_psf = 1.0
 kernel_size = 7
 flux_sum = 4096.0
-sigma_n = "pending_m2"
+sigma_n = 20.0
 s = "training_median"
 asinh_scale_factor = 0.1
 
@@ -86,6 +86,12 @@ embedding_dim = 64
 flow_layers = 6
 spline_knots = 8
 spline_interval = 5.0
+
+[dataset]
+montage_columns = 6
+montage_max_images = 30
+montage_peak_fraction = 0.1
+figure_dpi = 180
 
 [paths]
 scene_template = "configs/scene_template.toml"
