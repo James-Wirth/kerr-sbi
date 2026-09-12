@@ -12,6 +12,7 @@ from kerr_sbi import train
 from kerr_sbi.config import Config
 from kerr_sbi.dummy import build_dummy_dataset
 from kerr_sbi.inference import load_posterior
+from kerr_sbi.persistence import file_sha256
 from kerr_sbi.train import (
     effective_config,
     initialize_state,
@@ -42,8 +43,19 @@ def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
     resumed = run_training(cfg, "resumed", dummy=True, resume=True)
     clean = run_training(cfg, "clean", dummy=True)
     assert resumed["step"] == clean["step"] == 7
+    completed_directory = tmp_path / "runs/dummy/clean"
+    saved_files = {
+        path: (file_sha256(path), path.stat().st_mtime_ns)
+        for path in completed_directory.rglob("*")
+        if path.is_file()
+    }
     completed_resume = run_training(cfg, "clean", dummy=True, resume=True)
     assert completed_resume["updates_this_invocation"] == 0
+    assert saved_files == {
+        path: (file_sha256(path), path.stat().st_mtime_ns)
+        for path in completed_directory.rglob("*")
+        if path.is_file()
+    }
     assert cfg == original
     effective = effective_config(cfg, dummy=True, overfit=False)
     template = initialize_state(effective, optimizer_for(effective, 7))
@@ -95,6 +107,15 @@ def test_resume_matches_uninterrupted_training_and_checkpoint_predictions(
     changed["training"]["learning_rate"] *= 2
     with pytest.raises(ValueError, match="checkpoint config"):
         run_training(changed, "resumed", dummy=True, resume=True)
+    assert {"checkpoint.py", "inference.py", "persistence.py"} <= identity["source_sha256"].keys()
+
+    def changed_source_hash(path: Path) -> str:
+        return "0" * 64 if path.name == "checkpoint.py" else file_sha256(path)
+
+    with monkeypatch.context() as source_patch:
+        source_patch.setattr(train, "file_sha256", changed_source_hash)
+        with pytest.raises(ValueError, match="checkpoint config"):
+            run_training(cfg, "resumed", dummy=True, resume=True)
     directory = tmp_path / "runs/dummy/resumed"
     pointer = json.loads((directory / "latest.json").read_text())
     path = directory / pointer["directory"] / "state.eqx"

@@ -1,8 +1,9 @@
 import importlib.metadata
 import json
 import time
+from collections.abc import Callable
 from copy import deepcopy
-from dataclasses import asdict, replace
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -12,12 +13,14 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from kerr_sbi.checkpoint import EvaluationRecord, TrainingSummary
 from kerr_sbi.checkpoint import TrainState as TrainState
 from kerr_sbi.checkpoint import load_checkpoint as load_checkpoint
 from kerr_sbi.checkpoint import save_checkpoint as save_checkpoint
 from kerr_sbi.config import Config, project_path
 from kerr_sbi.data import (
     Normalization,
+    SplitData,
     batch_order,
     fit_normalization,
     load_split,
@@ -31,6 +34,47 @@ from kerr_sbi.dummy import dummy_config
 from kerr_sbi.inference import posterior_check as posterior_check
 from kerr_sbi.model import Posterior, masked_nll
 from kerr_sbi.persistence import exclusive_lock, file_sha256, write_json
+
+
+@dataclass(frozen=True)
+class PreparedRun:
+    cfg: Config
+    data: SplitData
+    rows: np.ndarray
+    validation: np.ndarray
+    stats: Normalization
+    optimizer: optax.GradientTransformation
+    batches_per_epoch: int
+    total_steps: int
+    sigma_n: float
+    max_seconds: float | None
+    identity: dict[str, Any]
+    directory: Path
+
+
+@dataclass(frozen=True)
+class RunProgress:
+    state: TrainState
+    history: list[EvaluationRecord]
+    previous_seconds: float
+    finished_summary: TrainingSummary | None = None
+
+
+@dataclass(frozen=True)
+class EvaluationData:
+    x: jax.Array
+    u: jax.Array
+    train_z: jax.Array
+    validation_u: jax.Array
+    validation_z: jax.Array
+    prior_train_nll: float
+    prior_validation_nll: float
+
+
+UpdateResult = tuple[Posterior, optax.OptState, jax.Array, jax.Array, jax.Array]
+Update = Callable[
+    [Posterior, optax.OptState, jax.Array, jax.Array, jax.Array, jax.Array], UpdateResult
+]
 
 
 def effective_config(cfg: Config, *, dummy: bool, overfit: bool) -> Config:
@@ -78,16 +122,16 @@ def initialize_state(cfg: Config, optimizer: optax.GradientTransformation) -> Tr
 
 def make_update(
     optimizer: optax.GradientTransformation, stats: Normalization, sigma_n: float
-) -> Any:
+) -> Update:
     @eqx.filter_jit
     def update(
         model: Posterior,
-        opt_state: Any,
+        opt_state: optax.OptState,
         key: jax.Array,
         x: jax.Array,
         u: jax.Array,
         mask: jax.Array,
-    ) -> tuple:
+    ) -> UpdateResult:
         next_key, observation_key = jax.random.split(key)
         z = training_observations(x, observation_key, stats, sigma_n)
         loss, gradients = eqx.filter_value_and_grad(masked_nll)(model, z, u, mask)
@@ -116,16 +160,9 @@ def evaluate(model: Posterior, z: jax.Array, u: jax.Array, batch_size: int) -> f
     return total / len(u)
 
 
-def run_training(
-    cfg: Config,
-    run_name: str,
-    *,
-    dummy: bool = False,
-    overfit: bool = False,
-    resume: bool = False,
-    stop_after: int | None = None,
-) -> dict[str, Any]:
-    started = time.perf_counter()
+def prepare_run(
+    cfg: Config, run_name: str, *, dummy: bool, overfit: bool, stop_after: int | None
+) -> PreparedRun:
     if not run_name or not all(c.isascii() and (c.isalnum() or c in "-_") for c in run_name):
         raise ValueError("run name must contain only letters, digits, hyphens or underscores")
     if stop_after is not None and (type(stop_after) is not int or stop_after < 1):
@@ -178,6 +215,7 @@ def run_training(
                 "train.py",
                 "obs_model.py",
                 "checkpoint.py",
+                "inference.py",
                 "persistence.py",
             )
         },
@@ -185,77 +223,136 @@ def run_training(
     identity = json.loads(json.dumps(identity))
     directory = project_path(cfg, "runs") / run_name
     directory.parent.mkdir(parents=True, exist_ok=True)
-    with exclusive_lock(directory.parent / f".{run_name}.lock"):
-        if directory.exists() != resume:
-            raise ValueError("use a new run name, or --resume for an existing checkpoint")
-        template = initialize_state(cfg, optimizer)
-        if resume:
-            state, checkpoint = load_checkpoint(directory, template, identity)
-            history = checkpoint["history"]
-            previous_seconds = checkpoint["summary"]["elapsed_seconds_total"]
-            if checkpoint["summary"]["stop_reason"] in (
-                "complete",
-                "early_stopping",
-                "overfit_target",
-                "time_limit",
-            ):
-                return {**checkpoint["summary"], "updates_this_invocation": 0}
-            if stop_after is not None and stop_after <= int(state.step):
-                raise ValueError("stop-after must be beyond the saved step")
-        else:
-            state, history, previous_seconds = template, [], 0.0
-            directory.mkdir()
-            write_json(directory / "run.json", identity)
-        initial_step = int(state.step)
-        x = jnp.asarray(data.x[rows])
-        u = theta_to_u(jnp.asarray(data.theta[rows]), stats)
-        validation_u = theta_to_u(jnp.asarray(data.theta[validation]), stats)
-        train_z = validation_observations(
-            x, jnp.asarray(data.idx[rows]), settings["validation_noise_seed"], stats, sigma_n
-        )
-        validation_z = validation_observations(
-            jnp.asarray(data.x[validation]),
-            jnp.asarray(data.idx[validation]),
-            settings["validation_noise_seed"],
-            stats,
-            sigma_n,
-        )
-        prior_train_nll = float(-prior_log_prob(u, stats).mean())
-        prior_validation_nll = float(-prior_log_prob(validation_u, stats).mean())
+    return PreparedRun(
+        cfg=cfg,
+        data=data,
+        rows=rows,
+        validation=validation,
+        stats=stats,
+        optimizer=optimizer,
+        batches_per_epoch=batches_per_epoch,
+        total_steps=total_steps,
+        sigma_n=sigma_n,
+        max_seconds=max_seconds,
+        identity=identity,
+        directory=directory,
+    )
 
-        def measure(current: TrainState) -> tuple[TrainState, dict]:
-            train_loss = evaluate(current.model, train_z, u, batch_size)
-            validation_loss = evaluate(current.model, validation_z, validation_u, batch_size)
-            if not np.isfinite([train_loss, validation_loss]).all():
-                raise FloatingPointError("nonfinite evaluation loss")
-            improved = validation_loss < float(current.best_validation)
-            current = replace(
-                current,
-                best_model=current.model if improved else current.best_model,
-                best_validation=jnp.asarray(validation_loss)
-                if improved
-                else current.best_validation,
-                stale_epochs=jnp.array(0) if improved else current.stale_epochs + 1,
+
+def create_or_restore_run(run: PreparedRun, *, resume: bool, stop_after: int | None) -> RunProgress:
+    cfg, optimizer, identity, directory = run.cfg, run.optimizer, run.identity, run.directory
+    if directory.exists() != resume:
+        raise ValueError("use a new run name, or --resume for an existing checkpoint")
+    template = initialize_state(cfg, optimizer)
+    if resume:
+        state, checkpoint = load_checkpoint(directory, template, identity)
+        history = checkpoint["history"]
+        previous_seconds = checkpoint["summary"]["elapsed_seconds_total"]
+        if checkpoint["summary"]["stop_reason"] in (
+            "complete",
+            "early_stopping",
+            "overfit_target",
+            "time_limit",
+        ):
+            return RunProgress(
+                state,
+                history,
+                previous_seconds,
+                {**checkpoint["summary"], "updates_this_invocation": 0},
             )
-            record = {
-                "step": int(current.step),
-                "train_nll": train_loss,
-                "validation_nll": validation_loss,
-                "prior_train_nll": prior_train_nll,
-                "prior_validation_nll": prior_validation_nll,
-            }
-            print(json.dumps(record), flush=True)
-            return current, record
+        if stop_after is not None and stop_after <= int(state.step):
+            raise ValueError("stop-after must be beyond the saved step")
+    else:
+        state, history, previous_seconds = template, [], 0.0
+        directory.mkdir()
+        write_json(directory / "run.json", identity)
+    return RunProgress(state, history, previous_seconds)
 
+
+def prepare_evaluation(run: PreparedRun) -> EvaluationData:
+    data, rows, validation = run.data, run.rows, run.validation
+    stats, sigma_n, settings = run.stats, run.sigma_n, run.cfg["training"]
+    x = jnp.asarray(data.x[rows])
+    u = theta_to_u(jnp.asarray(data.theta[rows]), stats)
+    validation_u = theta_to_u(jnp.asarray(data.theta[validation]), stats)
+    train_z = validation_observations(
+        x, jnp.asarray(data.idx[rows]), settings["validation_noise_seed"], stats, sigma_n
+    )
+    validation_z = validation_observations(
+        jnp.asarray(data.x[validation]),
+        jnp.asarray(data.idx[validation]),
+        settings["validation_noise_seed"],
+        stats,
+        sigma_n,
+    )
+    prior_train_nll = float(-prior_log_prob(u, stats).mean())
+    prior_validation_nll = float(-prior_log_prob(validation_u, stats).mean())
+    return EvaluationData(
+        x, u, train_z, validation_u, validation_z, prior_train_nll, prior_validation_nll
+    )
+
+
+def measure(
+    current: TrainState, data: EvaluationData, batch_size: int
+) -> tuple[TrainState, EvaluationRecord]:
+    train_loss = evaluate(current.model, data.train_z, data.u, batch_size)
+    validation_loss = evaluate(current.model, data.validation_z, data.validation_u, batch_size)
+    if not np.isfinite([train_loss, validation_loss]).all():
+        raise FloatingPointError("nonfinite evaluation loss")
+    improved = validation_loss < float(current.best_validation)
+    current = replace(
+        current,
+        best_model=current.model if improved else current.best_model,
+        best_validation=jnp.asarray(validation_loss) if improved else current.best_validation,
+        stale_epochs=jnp.array(0) if improved else current.stale_epochs + 1,
+    )
+    record: EvaluationRecord = {
+        "step": int(current.step),
+        "train_nll": train_loss,
+        "validation_nll": validation_loss,
+        "prior_train_nll": data.prior_train_nll,
+        "prior_validation_nll": data.prior_validation_nll,
+    }
+    print(json.dumps(record), flush=True)
+    return current, record
+
+
+def run_training(
+    cfg: Config,
+    run_name: str,
+    *,
+    dummy: bool = False,
+    overfit: bool = False,
+    resume: bool = False,
+    stop_after: int | None = None,
+) -> TrainingSummary:
+    started = time.perf_counter()
+    run = prepare_run(cfg, run_name, dummy=dummy, overfit=overfit, stop_after=stop_after)
+    cfg, directory = run.cfg, run.directory
+    settings = cfg["training"]
+    batch_size = settings["batch_size"]
+    batches_per_epoch, total_steps = run.batches_per_epoch, run.total_steps
+    max_seconds = run.max_seconds
+    with exclusive_lock(directory.parent / f".{run_name}.lock"):
+        progress = create_or_restore_run(run, resume=resume, stop_after=stop_after)
+        if progress.finished_summary is not None:
+            return progress.finished_summary
+        state, history, previous_seconds = (
+            progress.state,
+            progress.history,
+            progress.previous_seconds,
+        )
+        initial_step = int(state.step)
+        evaluation = prepare_evaluation(run)
         pending_evaluation = (
             history
             and history[-1]["step"] < int(state.step)
             and (int(state.step) % batches_per_epoch == 0 or int(state.step) == total_steps)
         )
         if not history or pending_evaluation:
-            state, record = measure(state)
+            state, record = measure(state, evaluation, batch_size)
             history.append(record)
-        update = make_update(optimizer, stats, sigma_n)
+        update = make_update(run.optimizer, run.stats, run.sigma_n)
         durations, gradient_norms, batch_losses = [], [], []
         stop_reason = "complete"
         epoch_order = epoch_masks = None
@@ -275,13 +372,18 @@ def run_training(
                 epoch, batch = divmod(step, batches_per_epoch)
                 if epoch != active_epoch:
                     epoch_order, epoch_masks = batch_order(
-                        len(rows), batch_size, jax.random.fold_in(state.shuffle_key, epoch)
+                        len(evaluation.x), batch_size, jax.random.fold_in(state.shuffle_key, epoch)
                     )
                     active_epoch = epoch
                 indices, mask = epoch_order[batch], epoch_masks[batch]
                 before = time.perf_counter()
                 model, opt_state, key, loss, gradient_norm = update(
-                    state.model, state.opt_state, state.noise_key, x[indices], u[indices], mask
+                    state.model,
+                    state.opt_state,
+                    state.noise_key,
+                    evaluation.x[indices],
+                    evaluation.u[indices],
+                    mask,
                 )
                 loss, gradient_norm = float(loss), float(gradient_norm)
                 durations.append(time.perf_counter() - before)
@@ -300,12 +402,12 @@ def run_training(
                     or int(state.step) == total_steps
                     or check_target
                 ):
-                    state, record = measure(state)
+                    state, record = measure(state, evaluation, batch_size)
                     history.append(record)
                     if (
                         overfit
                         and int(state.step) >= cfg["dummy_overfit"]["target_check_steps"]
-                        and record["train_nll"] < prior_train_nll
+                        and record["train_nll"] < evaluation.prior_train_nll
                     ):
                         stop_reason = "overfit_target"
                         break
@@ -314,7 +416,7 @@ def run_training(
                         break
         except KeyboardInterrupt:
             stop_reason = "interrupted"
-        summary = {
+        summary: TrainingSummary = {
             "run": run_name,
             "dummy": dummy,
             "overfit": overfit,
@@ -332,6 +434,6 @@ def run_training(
             "last_evaluation": history[-1],
             "checkpoint_root": str(directory),
         }
-        save_checkpoint(directory, state, identity, history, summary)
+        save_checkpoint(directory, state, run.identity, history, summary)
         write_json(directory / "summary.json", summary)
         return summary
