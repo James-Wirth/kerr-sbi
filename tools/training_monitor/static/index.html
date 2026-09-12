@@ -32,6 +32,17 @@
           <option value="dummy">Dummy checks</option>
         </select>
         <nav id="run-list" aria-label="Training runs"></nav>
+        <details class="trash-panel">
+          <summary id="trash-summary">Trash · 0 runs</summary>
+          <p class="muted small">
+            Restore a run, or empty the trash to free disk space. Shared
+            datasets stay available.
+          </p>
+          <div id="trash-list"></div>
+          <button id="empty-trash" class="quiet danger" disabled>
+            Empty trash
+          </button>
+        </details>
         <div class="storage">
           <div class="eyebrow">DISK SPACE</div>
           <strong id="disk-free">—</strong>
@@ -45,6 +56,18 @@
       </aside>
       <main>
         <div id="notice" class="notice" hidden></div>
+        <section id="generation-panel" class="panel generation-panel" hidden>
+          <div class="panel-heading">
+            <div>
+              <h3>Preparing reusable images</h3>
+              <p>
+                Rendering is shared across experiments. Training uses a
+                completed snapshot.
+              </p>
+            </div>
+          </div>
+          <div id="generation-list"></div>
+        </section>
         <section class="run-heading">
           <div>
             <div class="eyebrow" id="run-kind">EXPERIMENT OVERVIEW</div>
@@ -172,11 +195,38 @@
             </details>
           </section>
         </div>
+        <section id="diagnostics-panel" class="panel diagnostics-panel" hidden>
+          <div class="panel-heading">
+            <div>
+              <h3>Development checks</h3>
+              <p>
+                Independent simulations · selected checkpoint · exploratory
+                calibration
+              </p>
+            </div>
+          </div>
+          <dl id="diagnostics-stats" class="config"></dl>
+          <p id="diagnostics-note" class="muted small"></p>
+          <div id="diagnostics-plots" class="diagnostics-plots"></div>
+        </section>
         <footer>
-          <span>Read-only · stays on this machine</span
+          <span>Local storage · shared datasets are preserved</span
           ><span id="last-refresh">Waiting for local records</span>
         </footer>
       </main>
     </div>
+    <dialog
+      id="cleanup-dialog"
+      aria-labelledby="cleanup-title"
+      aria-describedby="cleanup-description"
+    >
+      <h2 id="cleanup-title"></h2>
+      <p id="cleanup-description"></p>
+      <p id="cleanup-error" class="danger" role="alert" hidden></p>
+      <div class="dialog-actions">
+        <button id="cleanup-cancel" class="quiet" autofocus>Cancel</button
+        ><button id="cleanup-confirm" class="danger-button"></button>
+      </div>
+    </dialog>
   </body>
 </html>

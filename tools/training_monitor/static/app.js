@@ -31,10 +31,12 @@ const statuses = {
   unavailable: "No live record",
 };
 let selected = new URLSearchParams(location.search).get("run"),
+  pendingRun = selected,
   overview,
   currentRun,
   polling = false,
-  previewToken = 0;
+  previewToken = 0,
+  cleanupAction;
 async function api(path) {
   const response = await fetch(path, { cache: "no-store" });
   const value = await response.json();
@@ -52,6 +54,62 @@ function pairs(target, rows) {
     ...rows.map(([key, value]) => {
       const row = el("div");
       row.append(el("dt", key), el("dd", value));
+      return row;
+    }),
+  );
+}
+async function mutate(path, payload) {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "X-Monitor-Token": overview.mutation_token,
+    },
+    body: JSON.stringify(payload),
+  });
+  const value = await response.json();
+  if (!response.ok) throw new Error(value.error || "Cleanup was refused");
+  return value;
+}
+function confirmCleanup(title, description, label, action) {
+  cleanupAction = action;
+  $("cleanup-title").textContent = title;
+  $("cleanup-description").textContent = description;
+  $("cleanup-confirm").textContent = label;
+  $("cleanup-error").hidden = true;
+  $("cleanup-dialog").showModal();
+}
+function trashRun(run) {
+  confirmCleanup(
+    `Move ${run.name} to trash?`,
+    `${bytes(run.bytes)} of checkpoints, metrics and run outputs will leave the experiment list. You can restore this run until the trash is emptied. Shared simulation images and arrays are preserved.`,
+    "Move to trash",
+    () => mutate("/api/runs/trash", { id: run.id }),
+  );
+}
+function renderTrash() {
+  const entries = overview.trash || [];
+  $("trash-summary").textContent =
+    `Trash · ${entries.length} runs · ${bytes(overview.storage.trash || 0)}`;
+  $("empty-trash").disabled = !entries.length;
+  $("trash-list").replaceChildren(
+    ...entries.map((entry) => {
+      const row = el("div", undefined, "trash-row"),
+        details = el("div");
+      details.append(
+        el("strong", entry.original),
+        el("small", bytes(entry.bytes)),
+      );
+      const restore = el("button", "Restore", "quiet");
+      restore.setAttribute("aria-label", `Restore ${entry.original}`);
+      restore.onclick = () =>
+        confirmCleanup(
+          `Restore ${entry.original}?`,
+          "The run will return to the experiment list with its original name and outputs.",
+          "Restore run",
+          () => mutate("/api/trash/restore", { id: entry.id }),
+        );
+      row.append(details, restore);
       return row;
     }),
   );
@@ -80,6 +138,7 @@ function renderRuns() {
         ),
       );
       button.onclick = () => {
+        pendingRun = null;
         selected = run.id;
         const url = new URL(location);
         url.searchParams.set("run", selected);
@@ -87,7 +146,19 @@ function renderRuns() {
         renderRuns();
         refreshRun();
       };
-      return button;
+      const row = el("div", undefined, "run-row");
+      const remove = el("button", undefined, "trash-button");
+      const icon = el("span", "×");
+      icon.setAttribute("aria-hidden", "true");
+      remove.append(icon);
+      remove.disabled = run.active;
+      remove.title = run.active
+        ? "Training or diagnostics is using this run"
+        : `Move ${run.name} to trash (${bytes(run.bytes)})`;
+      remove.setAttribute("aria-label", `Move ${run.name} to trash`);
+      remove.onclick = () => trashRun(run);
+      row.append(button, remove);
+      return row;
     }),
   );
   if (!runs.length)
@@ -202,9 +273,11 @@ function renderRun(run) {
     `status${["running", "initializing", "evaluating", "saving"].includes(run.status) ? " live" : ""}`;
   let caution = run.dummy
     ? "Dummy data checks software behavior. These results do not establish Kerr inference or calibration."
-    : run.train_count < 256
-      ? "Small physical smoke test. This dataset is sufficient to exercise training, but not to assess generalization or calibration."
-      : "";
+    : run.overfit
+      ? "Noiseless overfit check on training images. This checks learnability; use the noisy pilot to assess generalization."
+      : run.train_count < 256
+        ? "Small physical smoke test. This dataset is sufficient to exercise training, but not to assess generalization or calibration."
+        : "";
   if (run.status === "unconfirmed")
     caution +=
       " No event has arrived for 30 seconds. The process may be compiling, evaluating or no longer running.";
@@ -241,6 +314,9 @@ function renderRun(run) {
   $("loss-caption").textContent +=
     ` Training prior NLL: ${fmt(run.current.prior_train_nll)}.`;
   pairs("run-config", [
+    ["Reusable dataset", run.dataset_path || "Legacy dataset"],
+    ["Snapshot", run.dataset_id],
+    ["Run storage", bytes(run.bytes)],
     ["Batch size", count(run.settings.batch_size)],
     ["Peak learning rate", run.settings.learning_rate?.toExponential(1) || "—"],
     ["Warmup", `${count(run.settings.warmup_steps)} updates`],
@@ -267,6 +343,48 @@ function renderRun(run) {
         return tr;
       }),
   );
+  const diagnostics = run.diagnostics;
+  $("diagnostics-panel").hidden = !diagnostics?.n_observations;
+  if (diagnostics?.n_observations) {
+    pairs("diagnostics-stats", [
+      ["Development observations", count(diagnostics.n_observations)],
+      ["Posterior draws per image", count(diagnostics.posterior_samples)],
+      [
+        "Development NLL / prior",
+        `${fmt(diagnostics.nll)} / ${fmt(diagnostics.prior_nll)}`,
+      ],
+      ["NLL with shuffled images", fmt(diagnostics.shuffled_nll)],
+      [
+        "Spin RMSE / prior baseline",
+        `${fmt(diagnostics.rmse[0])} / ${fmt(diagnostics.prior_rmse[0])}`,
+      ],
+      [
+        "Inclination RMSE / prior baseline",
+        `${fmt(diagnostics.rmse[1], 1)}° / ${fmt(diagnostics.prior_rmse[1], 1)}°`,
+      ],
+      [
+        "90% coverage · spin / inclination",
+        `${fmt(diagnostics.coverage["0.9"][0] * 100, 1)}% / ${fmt(diagnostics.coverage["0.9"][1] * 100, 1)}%`,
+      ],
+    ]);
+    $("diagnostics-note").textContent =
+      "A lower NLL with matched images than shuffled images is evidence that the network uses the observation. Development checks guide experiments; the final test set remains reserved.";
+    const signature = `${run.id}:${diagnostics.created_at}`;
+    if ($("diagnostics-plots").dataset.signature !== signature) {
+      $("diagnostics-plots").dataset.signature = signature;
+      $("diagnostics-plots").replaceChildren(
+        ...["posterior_means", "ranks"].map((name) => {
+          const img = el("img");
+          img.src = `/api/figure?id=${encodeURIComponent(run.id)}&name=${name}`;
+          img.alt =
+            name === "ranks"
+              ? "Development posterior rank histograms"
+              : "Posterior mean and uncertainty against truth";
+          return img;
+        }),
+      );
+    }
+  }
 }
 function renderOverview() {
   const storage = overview.storage;
@@ -277,7 +395,8 @@ function renderOverview() {
   $("storage-breakdown").replaceChildren(
     ...[
       ["Data", storage.data],
-      ["Checkpoints & runs", storage.runs],
+      ["Checkpoints & runs", storage.runs - (storage.trash || 0)],
+      ["Trash", storage.trash || 0],
       ["Results", storage.results],
     ].map(([name, size]) => {
       const row = el("div", undefined, "storage-row");
@@ -285,10 +404,37 @@ function renderOverview() {
       return row;
     }),
   );
-  if (!selected) selected = overview.runs[0]?.id;
+  if (pendingRun && overview.runs.some((run) => run.id === pendingRun)) {
+    selected = pendingRun;
+    pendingRun = null;
+  }
+  if (!overview.runs.some((run) => run.id === selected))
+    selected = overview.runs[0]?.id;
   renderRuns();
+  renderTrash();
+  const generating = overview.datasets.filter((d) => !d.ready);
+  $("generation-panel").hidden = !generating.length;
+  $("generation-list").replaceChildren(
+    ...generating.map((d) => {
+      const row = el("div", undefined, "generation-row"),
+        bar = el("progress");
+      bar.max = Math.max(d.requested, 1);
+      bar.value = d.count;
+      row.append(
+        el("strong", d.id),
+        el(
+          "span",
+          `${count(d.count)} / ${count(d.requested)} · ${d.status}${Number.isFinite(d.remaining_seconds) ? ` · ≈ ${duration(d.remaining_seconds)} remaining` : ""}`,
+        ),
+        bar,
+      );
+      return row;
+    }),
+  );
   const previous = $("dataset-select").value;
-  const datasets = overview.datasets.filter((d) => d.split === "train");
+  const datasets = overview.datasets.filter(
+    (d) => d.split === "train" && d.ready,
+  );
   $("dataset-select").replaceChildren(
     ...datasets.map((d) => {
       const option = el("option", `${d.id} (${count(d.count)})`);
@@ -307,7 +453,7 @@ function renderOverview() {
         el("span", `${d.id}${d.dummy ? " · dummy" : ""}`),
         el(
           "span",
-          `${count(d.count)} / ${count(d.requested)} images${d.failed ? ` · ${d.failed} failed` : ""}`,
+          `${count(d.count)} / ${count(d.requested)} images · ${bytes(d.bytes)} · ${d.run_count} runs${d.failed ? ` · ${d.failed} failed` : ""}`,
         ),
       );
       return row;
@@ -326,6 +472,31 @@ async function refreshRun() {
   if (requested) {
     const run = await api(`/api/run?id=${encodeURIComponent(requested)}`);
     if (selected === requested) renderRun(run);
+  } else {
+    currentRun = null;
+    $("run-title").textContent = "Select a training run";
+    $("run-subtitle").textContent =
+      "New experiments will appear here. Trashed runs can be restored in the sidebar.";
+    $("run-kind").textContent = "EXPERIMENT OVERVIEW";
+    $("run-status").textContent = "Waiting";
+    $("run-status").className = "status";
+    $("run-caution").hidden = true;
+    $("diagnostics-panel").hidden = true;
+    ["step-value", "best-value", "elapsed-value", "rows-value"].forEach(
+      (id) => ($(id).textContent = "—"),
+    );
+    [
+      "epoch-value",
+      "prior-value",
+      "speed-value",
+      "validation-value",
+      "loss-caption",
+    ].forEach((id) => ($(id).textContent = "No run selected"));
+    $("step-bar").value = 0;
+    $("run-config").replaceChildren();
+    $("evaluations").replaceChildren();
+    $("checkpoint-info").textContent = "No checkpoint selected.";
+    chart([]);
   }
 }
 async function preview() {
@@ -397,6 +568,35 @@ async function refresh() {
   }
 }
 $("refresh").onclick = refresh;
+$("cleanup-cancel").onclick = () => $("cleanup-dialog").close();
+$("cleanup-confirm").onclick = async () => {
+  $("cleanup-confirm").disabled = true;
+  $("cleanup-cancel").disabled = true;
+  try {
+    await cleanupAction();
+    $("cleanup-dialog").close();
+    await refresh();
+  } catch (error) {
+    $("cleanup-error").textContent = error.message;
+    $("cleanup-error").hidden = false;
+  } finally {
+    $("cleanup-confirm").disabled = false;
+    $("cleanup-cancel").disabled = false;
+  }
+};
+$("empty-trash").onclick = () => {
+  const entries = [...overview.trash];
+  confirmCleanup(
+    `Permanently delete ${entries.length} trashed runs?`,
+    `${entries.map((e) => e.original).join(", ")}. This frees approximately ${bytes(entries.reduce((sum, e) => sum + e.bytes, 0))}. These run outputs cannot be restored afterward. Shared datasets are preserved.`,
+    "Delete permanently",
+    () =>
+      mutate("/api/trash/purge", {
+        ids: entries.map((e) => e.id),
+        confirm: true,
+      }),
+  );
+};
 $("run-filter").onchange = renderRuns;
 $("dataset-select").onchange = () => {
   $("image-index").value = 0;

@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import sys
 import time
 from pathlib import Path
 
@@ -9,7 +10,9 @@ import pytest
 MONITOR = Path(__file__).resolve().parents[1] / "tools/training_monitor/records.py"
 spec = importlib.util.spec_from_file_location("monitor_records", MONITOR)
 records_module = importlib.util.module_from_spec(spec)
+sys.path.insert(0, str(MONITOR.parent))
 spec.loader.exec_module(records_module)
+sys.path.pop(0)
 Records = records_module.Records
 
 

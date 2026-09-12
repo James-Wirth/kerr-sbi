@@ -183,6 +183,119 @@ input {
 .run-button.active strong {
   color: var(--blue);
 }
+.run-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 30px;
+  align-items: center;
+  gap: 2px;
+}
+.trash-button {
+  font-size: 22px;
+  padding: 3px;
+  border-color: transparent;
+  background: transparent;
+  color: var(--muted);
+}
+.trash-button:hover:not(:disabled) {
+  color: #a33737;
+  background: #fae8e5;
+}
+button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.trash-panel {
+  padding: 0 0 26px;
+}
+.trash-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-top: 1px solid var(--line);
+}
+.trash-row strong,
+.trash-row small {
+  display: block;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+}
+.trash-row small {
+  color: var(--muted);
+  margin-top: 4px;
+}
+.trash-row button {
+  font-size: 12px;
+  padding: 6px;
+}
+.danger {
+  color: #a33737;
+}
+dialog {
+  width: min(520px, calc(100vw - 32px));
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  color: var(--ink);
+  box-shadow: 0 20px 70px #12283240;
+}
+dialog::backdrop {
+  background: #12283288;
+}
+dialog h2 {
+  font-size: 22px;
+  overflow-wrap: anywhere;
+}
+dialog p {
+  font-size: 14px;
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+.danger-button {
+  color: white;
+  background: #993a3a;
+  border-color: #993a3a;
+}
+.generation-panel {
+  margin-bottom: 24px;
+}
+#generation-list {
+  padding: 12px 24px 20px;
+}
+.generation-row {
+  display: grid;
+  gap: 7px;
+  font-size: 13px;
+  padding: 8px 0;
+}
+.generation-row span {
+  color: var(--muted);
+}
+.generation-row progress {
+  width: 100%;
+}
+.diagnostics-panel {
+  margin-top: 24px;
+}
+#diagnostics-note {
+  padding: 0 24px;
+}
+.diagnostics-plots {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+}
+.diagnostics-plots img {
+  width: 100%;
+  height: auto;
+}
 .storage {
   border-top: 1px solid #cbd7de;
   padding-top: 23px;

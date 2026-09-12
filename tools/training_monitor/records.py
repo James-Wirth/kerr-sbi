@@ -1,3 +1,4 @@
+import hashlib
 import json
 import math
 import shutil
@@ -6,6 +7,14 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+from lifecycle import RunTrash, is_active, is_locked
+
+
+def snapshot_id(metadata: dict[str, Any]) -> str:
+    content = {
+        key: metadata.get(key) for key in ("arrays", "params_sha256", "prior", "observation")
+    }
+    return hashlib.sha256(json.dumps(content, sort_keys=True).encode()).hexdigest()[:16]
 
 
 def contained(root: Path, path: Path) -> Path:
@@ -64,6 +73,7 @@ class Records:
         self.data = contained(self.root, data or self.root / "data")
         self.cached_storage: dict[str, Any] = {}
         self.storage_updated = 0.0
+        self.trash = RunTrash(self.root, self.runs, self.data)
 
     def storage(self) -> dict[str, Any]:
         if time.monotonic() - self.storage_updated > 30:
@@ -73,6 +83,7 @@ class Records:
                 "total": usage.total,
                 "data": file_bytes(self.data),
                 "runs": file_bytes(self.runs),
+                "trash": file_bytes(self.trash.directory),
                 "results": file_bytes(self.root / "results"),
                 "planned_dataset": 13000 * (64 * 64 * 16 + 14),
             }
@@ -81,6 +92,8 @@ class Records:
 
     def run(self, identifier: str) -> dict[str, Any]:
         directory = contained(self.runs, self.runs / identifier)
+        if any(part.startswith(".") for part in Path(identifier).parts):
+            raise ValueError("hidden runs are not accessible")
         identity = read_json(contained(self.runs, directory / "run.json"))
         if not identity:
             raise FileNotFoundError("run not found")
@@ -139,6 +152,11 @@ class Records:
             )
         return {
             "id": identifier,
+            "active": is_active(directory),
+            "bytes": file_bytes(directory),
+            "dataset_id": snapshot_id(identity.get("dataset", {})),
+            "dataset_path": identity.get("config", {}).get("paths", {}).get("data"),
+            "diagnostics": read_json(contained(directory, directory / "diagnostics/summary.json")),
             "name": directory.name,
             "dummy": identity.get("dummy", False),
             "overfit": identity.get("overfit", False),
@@ -172,25 +190,84 @@ class Records:
 
     def datasets(self) -> list[dict[str, Any]]:
         result = []
-        for path in sorted(self.data.rglob("meta.json")):
-            if not path.resolve().is_relative_to(self.data):
+        directories = {
+            path.parent
+            for name in ("meta.json", "generation.json")
+            for path in self.data.rglob(name)
+        }
+        for directory in sorted(directories):
+            if not directory.resolve().is_relative_to(self.data):
                 continue
-            metadata = read_json(path)
-            if "n_requested" not in metadata or not (path.parent / "x.npy").is_file():
+            metadata = read_json(directory / "meta.json")
+            generation = read_json(directory / "generation.json")
+            ready = "n_requested" in metadata and (directory / "x.npy").is_file()
+            if not ready and not generation:
                 continue
             dummy = metadata.get("dataset_kind") == "dummy"
+            requested = metadata.get("n_requested", 0)
             rendered = metadata.get("n_examples" if dummy else "n_rendered", 0)
+            preprocessed = rendered
+            failed, remaining = metadata.get("n_failed", 0), None
+            active = False
+            if generation:
+                active = is_locked(directory.parent / ".generation.lock")
+                try:
+                    with (directory / "params.csv").open() as stream:
+                        requested = max(0, sum(1 for _ in stream) - 1)
+                except OSError:
+                    continue
+                rendered = sum(1 for _ in (directory / "pfm").glob("*.pfm"))
+                ready = ready and preprocessed == requested and metadata["n_requested"] == requested
+                if not ready:
+                    metadata = generation
+                if active and rendered < requested:
+                    durations = []
+                    latest = {}
+                    try:
+                        for line in (
+                            (directory / "renders.jsonl").read_bytes().splitlines(keepends=True)
+                        ):
+                            if not line.endswith(b"\n"):
+                                continue
+                            try:
+                                event = json.loads(line)
+                                latest[event["idx"]] = event
+                            except (ValueError, KeyError, TypeError):
+                                continue
+                        durations = [
+                            row["render_seconds"]
+                            for row in latest.values()
+                            if row.get("status") == "success"
+                        ]
+                        failed = sum(row.get("status") == "failed" for row in latest.values())
+                    except OSError:
+                        pass
+                    if durations:
+                        remaining = float(np.median(durations[-30:])) * (requested - rendered)
             result.append(
                 {
-                    "id": str(path.parent.relative_to(self.data)),
+                    "id": str(directory.relative_to(self.data)),
+                    "snapshot_id": snapshot_id(metadata) if ready else None,
+                    "bytes": file_bytes(directory),
+                    "ready": ready,
+                    "status": "ready"
+                    if ready
+                    else "rendering"
+                    if active and rendered < requested
+                    else "awaiting preprocessing"
+                    if rendered == requested
+                    else "paused",
+                    "remaining_seconds": remaining,
                     "dummy": dummy,
                     "split": metadata.get("split"),
                     "count": rendered,
-                    "requested": metadata["n_requested"],
+                    "requested": requested,
                     "missing": len(metadata.get("missing_indices", [])),
-                    "failed": metadata.get("n_failed", 0),
+                    "failed": failed,
                     "seed": metadata.get("seed"),
-                    "noise": metadata.get("observation", {}).get("sigma_n"),
+                    "noise": metadata.get(
+                        "observation", metadata.get("identity", {}).get("observation", {})
+                    ).get("sigma_n"),
                     "simulator": metadata.get("nullgeo"),
                 }
             )
@@ -200,6 +277,8 @@ class Records:
         runs, errors = [], []
         for path in self.runs.rglob("run.json"):
             identifier = str(path.parent.relative_to(self.runs))
+            if any(part.startswith(".") for part in Path(identifier).parts):
+                continue
             try:
                 run = self.run(identifier)
                 runs.append(
@@ -207,6 +286,9 @@ class Records:
                         key: run[key]
                         for key in (
                             "id",
+                            "active",
+                            "bytes",
+                            "dataset_id",
                             "name",
                             "dummy",
                             "overfit",
@@ -220,9 +302,13 @@ class Records:
             except (OSError, ValueError, KeyError, TypeError):
                 errors.append(identifier)
         runs.sort(key=lambda r: r["modified"], reverse=True)
+        datasets = self.datasets()
+        for dataset in datasets:
+            dataset["run_count"] = sum(run["dataset_id"] == dataset["snapshot_id"] for run in runs)
         return {
             "runs": runs,
-            "datasets": self.datasets(),
+            "datasets": datasets,
+            "trash": self.trash.entries(),
             "storage": self.storage(),
             "unreadable_runs": errors,
             "timestamp": time.time(),
