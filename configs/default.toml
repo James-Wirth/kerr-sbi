@@ -83,7 +83,11 @@ validation_noise_seed = 42
 patience = 20
 max_epochs = 200
 embedding_dim = 64
+conv_channels = [32, 64, 128, 128, 128]
+dense_width = 256
 flow_layers = 6
+flow_nn_width = 50
+flow_nn_depth = 1
 spline_knots = 8
 spline_interval = 5.0
 

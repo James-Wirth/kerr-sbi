@@ -12,6 +12,19 @@ def cfg() -> Config:
 
 
 @pytest.fixture
+def small_model_cfg(cfg: Config) -> Config:
+    cfg["training"].update(
+        conv_channels=[2, 4, 4, 4, 4],
+        dense_width=8,
+        embedding_dim=4,
+        flow_layers=2,
+        flow_nn_width=8,
+        spline_knots=4,
+    )
+    return cfg
+
+
+@pytest.fixture
 def full_psf_convolution(cfg: Config) -> Callable[[np.ndarray], np.ndarray]:
     obs = cfg["observation"]
     radius = obs["kernel_size"] // 2
