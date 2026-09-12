@@ -15,7 +15,7 @@ import numpy as np
 from matplotlib.colors import LogNorm, Normalize
 from tqdm import tqdm
 
-from kerr_sbi.config import DEFAULT_CONFIG, Config, load_config, project_path
+from kerr_sbi.config import DEFAULT_CONFIG, Config, isolate_run, load_config, project_path
 from kerr_sbi.fisher import central_difference, fisher_bounds
 from kerr_sbi.obs_model import preprocess_pfm
 from kerr_sbi.provenance import simulator_provenance
@@ -287,8 +287,11 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--plot-only", action="store_true")
+    parser.add_argument("--run-name")
     args = parser.parse_args()
     cfg = load_config(args.config)
+    if args.run_name:
+        cfg = isolate_run(cfg, args.run_name, plot_only=args.plot_only)
     results = project_path(cfg, "results")
     results.mkdir(parents=True, exist_ok=True)
     archive = results / "crb_grid.npz"
