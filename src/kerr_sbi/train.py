@@ -1,6 +1,5 @@
 import importlib.metadata
 import json
-import tempfile
 import time
 from copy import deepcopy
 from dataclasses import asdict, replace
@@ -13,6 +12,9 @@ import jax.numpy as jnp
 import numpy as np
 import optax
 
+from kerr_sbi.checkpoint import TrainState as TrainState
+from kerr_sbi.checkpoint import load_checkpoint as load_checkpoint
+from kerr_sbi.checkpoint import save_checkpoint as save_checkpoint
 from kerr_sbi.config import Config, project_path
 from kerr_sbi.data import (
     Normalization,
@@ -29,17 +31,6 @@ from kerr_sbi.data import (
 from kerr_sbi.dummy import dummy_config
 from kerr_sbi.model import Posterior, masked_nll
 from kerr_sbi.persistence import exclusive_lock, file_sha256, write_json
-
-
-class TrainState(eqx.Module):
-    model: Posterior
-    best_model: Posterior
-    opt_state: Any
-    noise_key: jax.Array
-    shuffle_key: jax.Array
-    step: jax.Array
-    best_validation: jax.Array
-    stale_epochs: jax.Array
 
 
 def effective_config(cfg: Config, *, dummy: bool, overfit: bool) -> Config:
@@ -125,54 +116,6 @@ def evaluate(model: Posterior, z: jax.Array, u: jax.Array, batch_size: int) -> f
     return total / len(u)
 
 
-def save_checkpoint(
-    directory: Path, state: TrainState, identity: dict, history: list, summary: dict
-) -> None:
-    name = f"checkpoint_{int(state.step):08d}"
-    target = directory / name
-    if target.exists():
-        raise FileExistsError(f"checkpoint already exists: {target}")
-    with tempfile.TemporaryDirectory(prefix=".checkpoint-", dir=directory) as temporary:
-        stage = Path(temporary) / name
-        stage.mkdir()
-        eqx.tree_serialise_leaves(stage / "state.eqx", state)
-        eqx.tree_serialise_leaves(stage / "best.eqx", state.best_model)
-        metadata = {
-            "identity": identity,
-            "history": history,
-            "summary": summary,
-            "files": {name: file_sha256(stage / name) for name in ("state.eqx", "best.eqx")},
-        }
-        write_json(stage / "metadata.json", metadata)
-        stage.rename(target)
-    write_json(
-        directory / "latest.json",
-        {"directory": name, "metadata_sha256": file_sha256(target / "metadata.json")},
-    )
-
-
-def load_checkpoint(
-    directory: Path, template: TrainState, identity: dict
-) -> tuple[TrainState, dict]:
-    pointer = json.loads((directory / "latest.json").read_text())
-    name = pointer["directory"]
-    if Path(name).name != name or not name.startswith("checkpoint_"):
-        raise ValueError("invalid checkpoint directory")
-    root = directory / name
-    if file_sha256(root / "metadata.json") != pointer["metadata_sha256"]:
-        raise ValueError("checkpoint metadata hash differs")
-    metadata = json.loads((root / "metadata.json").read_text())
-    if metadata["identity"] != identity:
-        raise ValueError("checkpoint config, data, normalization, code or environment differs")
-    if set(metadata["files"]) != {"state.eqx", "best.eqx"}:
-        raise ValueError("checkpoint file manifest is incomplete")
-    for name, digest in metadata["files"].items():
-        if name not in ("state.eqx", "best.eqx") or file_sha256(root / name) != digest:
-            raise ValueError("checkpoint array hash differs")
-    state = eqx.tree_deserialise_leaves(root / "state.eqx", template)
-    return state, metadata
-
-
 def run_training(
     cfg: Config,
     run_name: str,
@@ -229,7 +172,14 @@ def run_training(
         "device": str(jax.devices()[0]),
         "source_sha256": {
             name: file_sha256(Path(__file__).with_name(name))
-            for name in ("data.py", "model.py", "train.py", "obs_model.py")
+            for name in (
+                "data.py",
+                "model.py",
+                "train.py",
+                "obs_model.py",
+                "checkpoint.py",
+                "persistence.py",
+            )
         },
     }
     identity = json.loads(json.dumps(identity))
