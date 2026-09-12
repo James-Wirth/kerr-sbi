@@ -82,6 +82,7 @@ validation_fraction = 0.1
 validation_noise_seed = 42
 patience = 20
 max_epochs = 200
+max_steps = 0
 embedding_dim = 64
 conv_channels = [32, 64, 128, 128, 128]
 dense_width = 256
@@ -90,6 +91,20 @@ flow_nn_width = 50
 flow_nn_depth = 1
 spline_knots = 8
 spline_interval = 5.0
+
+[dummy_training]
+batch_size = 8
+warmup_steps = 5
+max_steps = 20
+posterior_samples = 19
+posterior_seed = 103
+
+[dummy_overfit]
+subset_size = 32
+max_steps = 200
+target_check_steps = 50
+max_seconds = 300.0
+sigma_n = 0.0
 
 [dataset]
 montage_columns = 6
