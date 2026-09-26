@@ -67,3 +67,27 @@ def test_error_targeting_includes_isco_face_and_excludes_existing_points():
     )
     with pytest.raises(ValueError, match="diagnostic errors"):
         targeted_radius_points(mesh, np.ones(len(mesh.gram)), diagnostic, np.array([np.nan, 1]), 16)
+
+
+def test_boundary_selection_survives_unreliable_hull_point_location(monkeypatch):
+    mesh = mesh_fixture()
+    tri = mesh.triangulation
+    parent, opposite = np.where(tri.neighbors == -1)
+    faces = np.array(
+        [np.delete(tri.simplices[p], q) for p, q in zip(parent, opposite, strict=True)]
+    )
+    valid = np.isfinite(tri.transform[parent]).all(axis=(1, 2))
+    isco = np.all(mesh.points[faces, 2] == 0, axis=1)
+    index = np.flatnonzero(valid & isco)[0]
+    target = mesh.points[faces[index]].mean(axis=0)
+    scores = np.zeros(len(mesh.gram))
+    scores[parent[index]] = 1
+
+    def fail_on_hull(points):
+        raise ValueError("interpolation outside radius mesh")
+
+    monkeypatch.setattr(mesh, "weights", fail_on_hull)
+    candidates, reasons = targeted_radius_points(mesh, scores, np.empty((0, 3)), np.empty(0), 16)
+    assert np.any(np.all(np.isclose(candidates, target, rtol=0, atol=1e-14), axis=1))
+    assert "isco_face_mass" in reasons
+    assert np.all(candidates >= mesh.bounds[0]) and np.all(candidates <= mesh.bounds[1])

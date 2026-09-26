@@ -120,13 +120,22 @@ def targeted_radius_points(
     for index in order[: count // 4]:
         if diagnostic_errors[index] > 0.125:
             add(diagnostic_points[index], "measured_image_error")
-    faces = mesh.points[mesh.triangulation.convex_hull]
+    triangulation = mesh.triangulation
+    parent, opposite = np.where(triangulation.neighbors == -1)
+    valid_parent = np.isfinite(triangulation.transform[parent]).all(axis=(1, 2))
+    parent, opposite = parent[valid_parent], opposite[valid_parent]
+    face_indices = np.array(
+        [
+            np.delete(triangulation.simplices[cell], vertex)
+            for cell, vertex in zip(parent, opposite, strict=True)
+        ]
+    )
+    faces = mesh.points[face_indices]
     centers = faces.mean(axis=1)
     for dimension in range(3):
         for edge in mesh.bounds[:, dimension]:
             centers[np.all(faces[:, :, dimension] == edge, axis=1), dimension] = edge
-    simplex, _ = mesh.weights(centers)
-    face_order = np.argsort(-scores[simplex], kind="stable")
+    face_order = np.argsort(-scores[parent], kind="stable")
     isco = np.all(faces[:, :, 2] == 0, axis=1)
     face_quota = int(count * boundary_fraction)
     for group, quota, reason in (
