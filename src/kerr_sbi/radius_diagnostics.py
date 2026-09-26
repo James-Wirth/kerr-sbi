@@ -46,6 +46,17 @@ def summarize_radius(axes: list[np.ndarray], mass: np.ndarray, radius_max: float
     spin = probability.sum(axis=(-2, -1))
     inclination = probability.sum(axis=(-3, -1))
     joint = probability.sum(axis=-2)
+    return summarize_radius_marginals(axes, spin, inclination, joint, radius_max)
+
+
+def summarize_radius_marginals(
+    axes: list[np.ndarray],
+    spin: np.ndarray,
+    inclination: np.ndarray,
+    joint: np.ndarray,
+    radius_max: float,
+) -> dict:
+    a, c, t = axes
     radii = isco_radius(a)[:, None] + t[None] * (radius_max - isco_radius(a)[:, None])
     means, stds, quantiles, cdfs = [], [], [], []
     values = (a, np.rad2deg(np.arccos(c)), radii.ravel())
