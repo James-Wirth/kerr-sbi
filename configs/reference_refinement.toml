@@ -1,0 +1,7 @@
+[refinement]
+training_counts = [500, 1000, 2000]
+new_nodes_per_round = [32, 64, 128]
+quadrature_sizes = [128, 256, 512]
+confirmation_per_case = 2
+confirmation_seed = 20260926
+required_successive_passes = 2

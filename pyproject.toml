@@ -9,7 +9,7 @@ description = "Amortized simulation-based inference from nullgeo Kerr images"
 requires-python = ">=3.11"
 dependencies = [
   "jax", "equinox", "optax", "flowjax", "numpy", "matplotlib",
-  "corner", "tomli-w", "tqdm",
+  "corner", "tomli-w", "tqdm", "scipy",
 ]
 
 [dependency-groups]

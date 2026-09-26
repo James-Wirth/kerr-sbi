@@ -468,6 +468,8 @@ dependencies = [
     { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
     { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "optax" },
+    { name = "scipy", version = "1.17.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.12'" },
+    { name = "scipy", version = "1.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.12'" },
     { name = "tomli-w" },
     { name = "tqdm" },
 ]
@@ -487,6 +489,7 @@ requires-dist = [
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "optax" },
+    { name = "scipy" },
     { name = "tomli-w" },
     { name = "tqdm" },
 ]
