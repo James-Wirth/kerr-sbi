@@ -8,11 +8,13 @@ import jax
 import jax.numpy as jnp
 import numpy as np
 
-from kerr_sbi.config import load_config
+from kerr_sbi.config import DEFAULT_CONFIG, load_config
 from kerr_sbi.obs_model import add_noise, preprocess_pfm
 from kerr_sbi.persistence import exclusive_lock, file_sha256, write_json
 from kerr_sbi.radius import RadiusCache, physical_radius
 from kerr_sbi.reference import RenderCache, prior_axes
+
+CONFIGS = DEFAULT_CONFIG.parent
 
 
 def render_points(
@@ -167,9 +169,11 @@ def generate(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Render and fit reference posteriors with an uncertain disk inner radius"
+    )
     parser.add_argument("--run", required=True)
-    parser.add_argument("--settings", type=Path, default=Path("configs/radius.toml"))
+    parser.add_argument("--settings", type=Path, default=CONFIGS / "radius.toml")
     parser.add_argument("--stage", choices=("grid", "analyze", "all"), default="all")
     args = parser.parse_args()
     if not args.run or not all(c.isascii() and (c.isalnum() or c in "-_") for c in args.run):

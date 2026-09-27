@@ -7,7 +7,9 @@ from kerr_sbi.dataset import generate_dataset
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Render a reproducible prior sample for one dataset split"
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--dataset")
     parser.add_argument("--split", choices=("train", "dev", "test"), required=True)

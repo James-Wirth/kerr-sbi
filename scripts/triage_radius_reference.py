@@ -16,6 +16,7 @@ from scipy.spatial import cKDTree
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
+from kerr_sbi.config import load_config
 from kerr_sbi.obs_model import luminance, preprocess
 from kerr_sbi.persistence import file_sha256, write_json
 from kerr_sbi.pfm import read_pfm
@@ -394,11 +395,15 @@ def triage(root: Path, source: str, destination: Path) -> None:
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--source", default="radius_20260926")
-    parser.add_argument("--run", default="foundations_20260926")
+    parser = argparse.ArgumentParser(
+        description="Classify numerical failures of a cached radius reference without rendering"
+    )
+    parser.add_argument(
+        "--source", required=True, help="radius reference run, e.g. radius_20260926"
+    )
+    parser.add_argument("--run", required=True, help="fresh output: runs/RUN")
     args = parser.parse_args()
-    root = Path(__file__).resolve().parents[1]
+    root = load_config()["project_root"]
     for name in (args.source, args.run):
         if not name or Path(name).name != name or name in (".", ".."):
             raise ValueError("source and run must be directory names")

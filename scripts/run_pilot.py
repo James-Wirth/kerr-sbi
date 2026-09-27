@@ -27,7 +27,7 @@ def prepare_split(cfg: Config, split: str, count: int, seed: int) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Reusable local images, overfit check, noisy pilot and development diagnostics"
+        description="Run the local pilot: data, overfit check, training and diagnostics"
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--dataset", required=True)

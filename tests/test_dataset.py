@@ -293,7 +293,7 @@ def test_generator_cli_fails_when_persistent_failures_remain(
     generation_setup: tuple, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     cfg, _, _, _ = generation_setup
-    path = Path(__file__).resolve().parents[1] / "scripts/01_generate.py"
+    path = Path(__file__).resolve().parents[1] / "scripts/generate_dataset.py"
     spec = importlib.util.spec_from_file_location("generate", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

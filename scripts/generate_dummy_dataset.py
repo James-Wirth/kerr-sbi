@@ -7,7 +7,9 @@ from kerr_sbi.dummy import build_dummy_dataset
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Build tiny synthetic data for M4 development")
+    parser = argparse.ArgumentParser(
+        description="Generate the tiny nonphysical dataset used for software checks"
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     args = parser.parse_args()
     print(json.dumps(build_dummy_dataset(load_config(args.config)), indent=2))

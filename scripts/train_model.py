@@ -10,7 +10,9 @@ from kerr_sbi.train import run_training
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Train, resume or preflight a neural posterior model"
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--run")
     parser.add_argument("--dataset")

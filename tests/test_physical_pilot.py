@@ -74,7 +74,7 @@ def test_complete_pilot_reuses_simulations_and_saved_diagnostics(
         lambda _: {"version": "fixture", "source_commit": "fixture", "binary_sha256": "fixture"},
     )
     monkeypatch.setattr(dataset, "render", fake_render)
-    path = Path(__file__).resolve().parents[1] / "scripts/run_local_pilot.py"
+    path = Path(__file__).resolve().parents[1] / "scripts/run_pilot.py"
     spec = importlib.util.spec_from_file_location("pilot_script", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

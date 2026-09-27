@@ -284,7 +284,9 @@ def summarize(data: dict[str, np.ndarray]) -> dict[str, Any]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Render the sensitivity grid and compute Fisher and Cramér-Rao bounds"
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--plot-only", action="store_true")
     parser.add_argument("--run-name")

@@ -49,7 +49,9 @@ def save_montage(cfg: Config, split: str) -> Path:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Apply the deterministic observation pipeline to rendered images"
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--dataset")
     parser.add_argument("--split", choices=("train", "dev", "test"), required=True)

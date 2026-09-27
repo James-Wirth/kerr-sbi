@@ -423,7 +423,7 @@ def analyze_radius(
             for path in (
                 root / "src/kerr_sbi/radius.py",
                 Path(__file__).resolve(),
-                root / "scripts/07_radius.py",
+                root / "scripts/build_radius_reference.py",
                 root / "src/kerr_sbi/reference_mesh.py",
                 root / "src/kerr_sbi/obs_model.py",
             )

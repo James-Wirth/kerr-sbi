@@ -92,13 +92,13 @@ def test_refinement_workflow_preserves_source_and_validates_direct_renders(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch, confirmation_bias: float
 ) -> None:
     project = Path(__file__).resolve().parents[1]
-    script = project / "scripts/06_refine_reference.py"
+    script = project / "scripts/refine_reference.py"
     spec = importlib.util.spec_from_file_location("refine_test", script)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
-    monkeypatch.setattr(module, "__file__", str(tmp_path / "scripts/06_refine_reference.py"))
+    monkeypatch.setattr(module, "__file__", str(tmp_path / "scripts/refine_reference.py"))
     for name in (
-        "scripts/06_refine_reference.py",
+        "scripts/refine_reference.py",
         "src/kerr_sbi/reference_mesh.py",
         "src/kerr_sbi/reference.py",
         "src/kerr_sbi/reference_diagnostics.py",

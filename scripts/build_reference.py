@@ -5,9 +5,11 @@ from pathlib import Path
 
 import numpy as np
 
-from kerr_sbi.config import load_config
+from kerr_sbi.config import DEFAULT_CONFIG, load_config
 from kerr_sbi.persistence import exclusive_lock, write_json
 from kerr_sbi.reference import RenderCache, prior_axes
+
+CONFIGS = DEFAULT_CONFIG.parent
 
 
 def generate(directory: Path, cfg: dict, settings: dict) -> None:
@@ -35,10 +37,12 @@ def generate(directory: Path, cfg: dict, settings: dict) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Render a prior grid and compare reference posteriors with a trained model"
+    )
     parser.add_argument("--run", required=True)
-    parser.add_argument("--checkpoint", default="local_pilot_20260912")
-    parser.add_argument("--settings", type=Path, default=Path("configs/reference.toml"))
+    parser.add_argument("--checkpoint", required=True, help="training run supplying the model")
+    parser.add_argument("--settings", type=Path, default=CONFIGS / "reference.toml")
     parser.add_argument("--stage", choices=("grid", "analyze", "disk-edge", "all"), default="all")
     args = parser.parse_args()
     if not args.run or not all(c.isascii() and (c.isalnum() or c in "-_") for c in args.run):

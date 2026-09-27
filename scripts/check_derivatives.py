@@ -594,7 +594,9 @@ def save_sampling_figures(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Check derivative convergence in step size and supersampling"
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--baseline", type=Path)
     parser.add_argument("--plot-only", action="store_true")

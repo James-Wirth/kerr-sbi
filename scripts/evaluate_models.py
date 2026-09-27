@@ -17,14 +17,13 @@ def valid_name(value: str) -> str:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description=(
-            "Evaluate completed physical runs on common development observations and the "
-            "fixed numerical reference cases; the first run is the paired baseline"
-        )
+        description="Compare trained models on development observations and reference cases"
     )
     parser.add_argument("--protocol", type=Path, default=DEFAULT_PROTOCOL)
     parser.add_argument("--name", type=valid_name, required=True, help="output: runs/NAME")
-    parser.add_argument("--runs", type=valid_name, nargs="+", required=True)
+    parser.add_argument(
+        "--runs", type=valid_name, nargs="+", required=True, help="first run is the paired baseline"
+    )
     args = parser.parse_args()
     if len(set(args.runs)) != len(args.runs):
         parser.error("runs must be distinct")

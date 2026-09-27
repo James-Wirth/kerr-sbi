@@ -11,7 +11,7 @@ from kerr_sbi.config import Config
 
 @pytest.fixture
 def sensitivity() -> ModuleType:
-    path = Path(__file__).resolve().parents[1] / "scripts" / "sensitivity.py"
+    path = Path(__file__).resolve().parents[1] / "scripts" / "map_sensitivity.py"
     spec = importlib.util.spec_from_file_location("sensitivity", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

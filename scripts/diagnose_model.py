@@ -8,7 +8,7 @@ from kerr_sbi.diagnostics import development_check
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Exploratory physical development checks using saved best weights"
+        description="Run exploratory development diagnostics on a trained model"
     )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     parser.add_argument("--run", required=True)

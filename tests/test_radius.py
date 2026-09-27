@@ -166,7 +166,7 @@ def test_radius_workflow_certification_requires_direct_validation(
     for name in (
         "src/kerr_sbi/radius.py",
         "src/kerr_sbi/radius_diagnostics.py",
-        "scripts/07_radius.py",
+        "scripts/build_radius_reference.py",
         "src/kerr_sbi/reference_mesh.py",
         "src/kerr_sbi/obs_model.py",
     ):

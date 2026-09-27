@@ -116,7 +116,9 @@ def save_edge_profiles(options: dict[str, Any], cfg: Config, directory: Path) ->
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
+    parser = argparse.ArgumentParser(
+        description="Render and compare the stylized and blackbody emission models"
+    )
     parser.add_argument("--config", type=Path, default=DEFAULT_CONFIG)
     args = parser.parse_args()
     cfg = load_config(args.config)

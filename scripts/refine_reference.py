@@ -9,7 +9,7 @@ import numpy as np
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-from kerr_sbi.config import load_config
+from kerr_sbi.config import DEFAULT_CONFIG, load_config
 from kerr_sbi.data import load_split
 from kerr_sbi.persistence import exclusive_lock, file_sha256, write_json
 from kerr_sbi.reference import (
@@ -21,6 +21,8 @@ from kerr_sbi.reference import (
 )
 from kerr_sbi.reference_diagnostics import convergence_pass, draw_contours
 from kerr_sbi.reference_mesh import ImageMesh, midpoint_points
+
+CONFIGS = DEFAULT_CONFIG.parent
 
 
 def physical_points(theta: np.ndarray) -> np.ndarray:
@@ -273,10 +275,12 @@ def refine(root: Path, source_name: str, run_name: str, settings: dict) -> dict:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--source", default="reference_20260926")
+    parser = argparse.ArgumentParser(
+        description="Refine a reference mesh until its numerical acceptance checks pass"
+    )
+    parser.add_argument("--source", required=True, help="reference run to refine")
     parser.add_argument("--run", required=True)
-    parser.add_argument("--settings", type=Path, default=Path("configs/reference_refinement.toml"))
+    parser.add_argument("--settings", type=Path, default=CONFIGS / "reference_refinement.toml")
     args = parser.parse_args()
     if args.source == args.run or any(
         not name or not all(c.isascii() and (c.isalnum() or c in "-_") for c in name)
