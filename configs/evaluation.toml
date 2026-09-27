@@ -1,0 +1,23 @@
+[development]
+split = "dev"
+count = 1000
+observation_noise_seed = 104
+draws = 1999
+batch_size = 16
+
+[reference]
+path = "runs/reference_refinement_20260926"
+cases = 18
+draws = 9999
+
+[sampling]
+posterior_seeds = [20260926, 2026092701]
+
+[analysis]
+coverage_levels = [0.68, 0.9, 0.95]
+headline_coverage_level = 0.9
+inclination_bin_edges_deg = [5, 30, 50, 65, 80]
+spin_bin_edges = [0, 0.1, 0.88, 0.98]
+bootstrap_seed = 2026092702
+bootstrap_repeats = 2000
+descriptive_cdf_threshold = 0.1
