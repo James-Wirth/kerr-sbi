@@ -11,3 +11,9 @@ runs/
 logs/
 .DS_Store
 results/
+
+!/assets/research/synthetic-observations.png
+!/assets/research/fisher-information.png
+!/assets/research/neural-posterior.png
+!/assets/research/reference-posteriors.png
+!/assets/research/status-report-2026-09-26.pdf
