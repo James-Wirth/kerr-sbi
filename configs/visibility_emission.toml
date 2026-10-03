@@ -1,0 +1,25 @@
+[experiment]
+baseline_run = "eht_visibility_20261003"
+truth_spin = 0.98
+truth_inclination_deg = 18.0
+truth_inner_radius = 8.0
+truth_emissivity_index = 2.0
+alternative_spin = 0.0
+radius_nodes = [7.8, 8.0, 8.2]
+inclination_nodes_deg = [16.0, 18.0, 20.0]
+emissivity_nodes = [1.8, 2.0, 2.2]
+supersample = 15
+confirmation_supersample = 25
+new_render_budget = 31
+training_budget = 0
+fov_uas = 125.0
+flux_jy = 0.6
+minimum_baseline_lambda = 100000000.0
+fft_padding = 16
+max_evaluations = 100
+max_interpolation_noise_norm = 0.25
+max_confirmation_noise_norm = 0.25
+parameter_lower = [7.8, 16.0, 1.8, 0.95, -10.0, -3.0, -3.0]
+parameter_upper = [8.2, 20.0, 2.2, 1.05, 10.0, 3.0, 3.0]
+starts = [[8.0, 18.0, 2.0, 1.0, 1.0, 0.2, 0.0], [8.0, 17.0, 2.0, 1.0, 0.0, 0.0, 0.0]]
+flux_bounds_jy = [0.3, 1.2]
