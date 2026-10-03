@@ -44,6 +44,13 @@ def main() -> None:
             difference_mjy=float(abs(fdifference[i]) * 1000),
             single_baseline_D=float(score[i]),
             maximum_sampling_change_in_sigma=float(errors[i]),
+            nearest_measured_glambda=float(
+                np.minimum(
+                    np.linalg.norm(uv - forecast["uv"][i], axis=1),
+                    np.linalg.norm(uv + forecast["uv"][i], axis=1),
+                ).min()
+                / 1e9
+            ),
         )
         for i in order[:8]
     ]
@@ -237,6 +244,15 @@ def main() -> None:
         )
         for name, result in summary["fits"].items()
     )
+    joint_status = (
+        "The lower-distance joint-search candidate is numerically unresolved: "
+        f"its 25→35 change is D={summary['comparisons']['joint']['n25_to_n35']:.6f}, "
+        "against the unchanged <0.25 gate. Its three optimization starts also hit the "
+        "evaluation limit. It is retained as an unfinished search result and is not "
+        "the selected numerically checked pair."
+        if not summary["accepted"]["joint"]
+        else "The joint candidate passes the declared individual-source numerical checks."
+    )
     report = f"""# Radial emission and observing nuisances — 3 October 2026
 
 The bounded study selected **{label}**,
@@ -247,14 +263,19 @@ This target is operational, not a universal indistinguishability threshold
 or detection significance.
 A bounded failure does not establish uniqueness or rule out other geometries/emission families.
 
+{joint_status}
+
 ## What observing nuisances and emission absorb
 
 At the two fixed traced geometries, using the existing q values and neutral observing parameters,
 D={d0:.6f}. Fitting scale, rotation, position and flux alone reduces this to {dn:.6f}:
 ΔD={d0 - dn:.6f}, removing {100 * (1 - dn**2 / d0**2):.3f}% of the initial D².
 Adding the cubic radial family while holding those fitted nuisances fixed gives D={df:.6f}.
+This numerically checked emission improvement is ΔD={dn - df:.6f}, or
+{100 * (1 - df**2 / dn**2):.3f}% of the nuisance-only residual D².
 Jointly fitting emission and the same nuisance ranges gives D={dj:.6f}, an additional
 ΔD={dn - dj:.6f} ({100 * (1 - dj**2 / dn**2):.3f}% of the nuisance-only residual D²).
+Joint-candidate numerical pass: **{summary["accepted"]["joint"]}**.
 Emission alone with neutral nuisances gives D={de:.6f}. These are conditional nested comparisons;
 D reductions are not additive information components and depend on fitting order.
 
@@ -343,6 +364,8 @@ imaginary-component D²={diagnostic["residual_imag_D2"]:.6f}. `diagnostics.json`
 baseline-length contributions and largest residual coordinates, preserving complex residuals
 rather than using amplitude alone. The sources have different transfer/redshift patterns;
 these residuals cannot be assigned uniquely to a physical feature by this radial-only study.
+Baselines from 6–8 Gλ contribute D²={groups[3]["D2"]:.6f},
+or {100 * groups[3]["D2"] / np.sum(abs(residual) ** 2):.2f}% of the retained-data separation.
 
 The fixed forecast uses {summary["forecast_nodes"]} independent half-plane nodes on a1 Gλ
 Cartesian grid inside12 Gλ; plotted conjugates are not extra independent measurements.
@@ -365,6 +388,9 @@ This identifies where added directional coverage would best separate this partic
 under the stated sensitivity. Source variability, scattering and instrumental gain errors
 are outside this study. If the aggregate forecast sampling gate fails, only explicitly
 passing nodes carry the pointwise numerical statement; the full-domain forecast is unresolved.
+The top node is {best["nearest_measured_glambda"]:.3f} Gλ from the nearest retained uv point
+or its conjugate. This is a frozen-pair forecast; refitting after adding measurements could
+move the best candidate and requires a separate study.
 
 ## Budget, preservation and reproduction
 
