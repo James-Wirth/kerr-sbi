@@ -1,0 +1,7 @@
+parent = "luminet_1979_20261003"
+sampling = [5, 7, 9]
+render_budget = 3
+max_seconds = 800
+verification_allowance_seconds = 200
+render_timeout = 240
+storage_budget_bytes = 500000000
