@@ -1,0 +1,16 @@
+[experiment]
+render_budget = 6
+max_seconds = 2400
+storage_budget_bytes = 5900000000
+render_timeout_seconds = 240
+sampling = [25, 35, 49]
+pattern_sampling = 49
+tolerance = 1e-9
+max_sampling_noise_norm = 0.25
+max_fft_noise_norm = 0.05
+max_algebra_error_jy = 2e-13
+max_acceleration_noise_norm = 1e-7
+max_truncation_error_jy = 1e-12
+moment_order = 12
+boundary_dilation_pixels = 1
+branch_radius_span = 2.0
