@@ -1,0 +1,22 @@
+[experiment]
+new_render_budget = 0
+max_seconds = 2400
+storage_budget_bytes = 5900000000
+moment_order = 12
+max_evaluations = 55
+optimizer_tolerance = 0.00000001
+nuisance_lower = [0.95, -10.0, -3.0, -3.0, 0.3]
+nuisance_upper = [1.05, 10.0, 3.0, 3.0, 1.2]
+nuisance_starts = [[1.0, 0.0, 0.0, 0.0, 0.6], [0.98, -5.0, 0.0, 0.0, 0.6], [1.02, 5.0, 0.0, 0.0, 0.6]]
+radial_degree = 3
+coefficient_lower = 0.25
+coefficient_upper = 4.0
+radial_starts = [[1.0, 1.0, 1.0], [0.7, 1.0, 1.4], [1.4, 1.0, 0.7]]
+max_sampling_D = 0.25
+near_degeneracy_D = 1.0
+max_fourier_D = 0.0000001
+max_truncation_jy = 0.000000000001
+max_algebra_jy = 0.0000000000002
+forecast_radius_glambda = 12.0
+forecast_step_glambda = 1.0
+forecast_sigma_jy = 0.005

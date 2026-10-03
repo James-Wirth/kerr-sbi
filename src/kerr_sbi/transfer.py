@@ -255,6 +255,22 @@ class Transfer:
         np.add.at(result, self.samples["pixel_index"].astype(np.intp), weighted)
         return result.reshape(self.metadata["height"], self.metadata["width"])
 
+    def emission_values(
+        self,
+        values: np.ndarray | None,
+        emissivity_index: float | None = None,
+        g_power: float | None = None,
+    ) -> np.ndarray:
+        if values is None:
+            return self.intensity(emissivity_index, g_power)
+        require(emissivity_index is None and g_power is None, "ambiguous emission overrides")
+        support = self.intensity(0.0, 0.0) > 0
+        values = np.asarray(values, dtype=float)
+        require(values.shape == support.shape, "one intensity per sample required")
+        require(np.isfinite(values).all() and np.all(values >= 0), "invalid sample intensities")
+        require(np.all(values[~support] == 0), "emission outside original hit support")
+        return values
+
     def visibility(
         self,
         uv: np.ndarray,
@@ -266,6 +282,7 @@ class Transfer:
         offset_uas: tuple[float, float] = (0.0, 0.0),
         baseline_batch: int = 64,
         sample_batch: int = 16384,
+        values: np.ndarray | None = None,
     ) -> np.ndarray:
         require(np.all(self.samples["finished"]), "unfinished rays; visibility is not certified")
         require(
@@ -280,7 +297,7 @@ class Transfer:
         scale = 2 * np.tan(np.deg2rad(self.metadata["resolved_scene"]["camera"]["fov_deg"]) / 2)
         xy = np.column_stack((self.samples["screen_u"], -self.samples["screen_v"]))
         xy *= self.metadata["width"] / scale
-        masses = self.intensity(emissivity_index, g_power) * self.samples["weight"]
+        masses = self.emission_values(values, emissivity_index, g_power) * self.samples["weight"]
         masses *= (fov_uas * UAS_TO_RAD / self.metadata["width"]) ** 2
         if flux_jy is not None:
             require(

@@ -14,6 +14,7 @@ class TransferFourier:
         g_power: float | None = None,
         order: int = 12,
         sample_batch: int = 262144,
+        values: np.ndarray | None = None,
     ) -> None:
         require(isinstance(order, int) and 0 <= order <= 20, "order must be in [0,20]")
         require(isinstance(sample_batch, int) and sample_batch > 0, "invalid sample batch")
@@ -24,7 +25,7 @@ class TransferFourier:
         self.order = order
         self.powers = [(a, degree - a) for degree in range(order + 1) for a in range(degree + 1)]
         self.moments = np.zeros((self.width * self.height, len(self.powers)))
-        values = transfer.intensity(emissivity_index, g_power)
+        values = transfer.emission_values(values, emissivity_index, g_power)
         scale = 2 * np.tan(np.deg2rad(transfer.metadata["resolved_scene"]["camera"]["fov_deg"]) / 2)
         for start in range(0, len(values), sample_batch):
             s = transfer.samples[start : start + sample_batch]
