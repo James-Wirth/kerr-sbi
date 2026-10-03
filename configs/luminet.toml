@@ -1,0 +1,43 @@
+inclination = 60.0
+radii = [10.0, 20.0, 30.0]
+distances = [1000.0, 2000.0, 4000.0]
+principal_distance = 4000.0
+width = 64
+screen_half_width = 40.0
+r_out = 40.0
+sampling = [3, 5, 7]
+angle_nodes = 181
+tolerance = 1e-9
+tight_tolerance = 1e-11
+reference_tolerance = 2e-11
+reference_tight_tolerance = 2e-13
+render_budget = 7
+max_seconds = 1400
+render_timeout = 240
+storage_budget_bytes = 2500000000
+neighbours = 12
+stencil_distance = 1.0
+stencil_radius_span = 3.0
+max_offset = 0.5
+[matched]
+b_rms = 0.02
+b_max = 0.06
+z_rms = 0.002
+z_max = 0.005
+[refinement]
+b_rms = 0.01
+b_max = 0.03
+z_rms = 0.001
+z_max = 0.003
+[conditional]
+p99 = 0.00002
+max = 0.0005
+[tolerance_check]
+radius_max = 0.01
+g_max = 0.0002
+[reference_check]
+b_max = 1e-7
+z_max = 1e-8
+[distant]
+b_max = 0.5
+z_max = 0.005
