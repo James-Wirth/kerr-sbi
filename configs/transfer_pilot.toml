@@ -1,0 +1,19 @@
+[experiment]
+render_budget = 40
+training_budget = 0
+max_seconds = 2700
+render_timeout_seconds = 180
+storage_budget_bytes = 3000000000
+minimum_baseline_lambda = 100000000.0
+fov_uas = 125.0
+max_sampling_noise_norm = 0.25
+max_tolerance_noise_norm = 0.25
+max_fft_noise_norm = 0.05
+max_algebra_error_jy = 2e-13
+reconstruction_roundoff_multiplier = 8
+sampling = [9, 15, 25]
+tolerance = 1e-9
+tight_tolerance = 1e-11
+baseline_batch = 64
+sample_batch = 16384
+emissivity_variants = [[2.8, 3.0], [2.0, 4.2], [3.1, 1.7]]
