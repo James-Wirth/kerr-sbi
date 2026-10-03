@@ -278,6 +278,9 @@ Jointly fitting emission and the same nuisance ranges gives D={dj:.6f}, an addit
 Joint-candidate numerical pass: **{summary["accepted"]["joint"]}**.
 Emission alone with neutral nuisances gives D={de:.6f}. These are conditional nested comparisons;
 D reductions are not additive information components and depend on fitting order.
+The checked emission gain (ΔD≈0.020) is smaller than the individual-source sampling shifts.
+It is positive at every saved setting, but these finite accuracy checks do not precisely
+resolve its continuum magnitude. The much larger nuisance reduction is the dominant result.
 
 The old nuisance vector on regular49 subray predictions gives D={dlegacy:.6f}; the required
 first refit gives {dn:.6f}. For the same regular49 source images represented as uniform pixels,
